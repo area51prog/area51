@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "./auth";
+import { useProfile } from "./useProfile";
 import { createClient } from "./supabase/client";
-import { Holding } from "./types";
 
 export interface NewHolding {
   symbol: string;
@@ -17,23 +17,68 @@ export interface PortfolioMeta {
   name: string;
 }
 
-const ACTIVE_KEY = "area51_active_portfolio";
+export interface Lot {
+  id: string;
+  portfolioId: string;
+  symbol: string;
+  quantity: number;
+  avgPrice: number;
+  buyDate: string;
+  createdAt: string;
+}
 
-function toHolding(row: { id: string; symbol: string; quantity: number; avg_price: number; buy_date: string }): Holding {
+export interface Position {
+  symbol: string;
+  quantity: number;
+  avgPrice: number;
+}
+
+export const SUMMARY_ID = "ALL";
+
+const ACTIVE_KEY = "area51_active_portfolio";
+const LOT_COLUMNS = "id, portfolio_id, symbol, quantity, avg_price, buy_date, created_at";
+
+function toLot(row: {
+  id: string;
+  portfolio_id: string;
+  symbol: string;
+  quantity: number;
+  avg_price: number;
+  buy_date: string;
+  created_at: string;
+}): Lot {
   return {
     id: row.id,
+    portfolioId: row.portfolio_id,
     symbol: row.symbol,
     quantity: Number(row.quantity),
     avgPrice: Number(row.avg_price),
     buyDate: row.buy_date,
+    createdAt: row.created_at,
   };
+}
+
+function aggregatePositions(lots: Lot[]): Position[] {
+  const bySymbol = new Map<string, { quantity: number; cost: number }>();
+  for (const lot of lots) {
+    const entry = bySymbol.get(lot.symbol) ?? { quantity: 0, cost: 0 };
+    entry.quantity += lot.quantity;
+    entry.cost += lot.quantity * lot.avgPrice;
+    bySymbol.set(lot.symbol, entry);
+  }
+  return Array.from(bySymbol.entries()).map(([symbol, { quantity, cost }]) => ({
+    symbol,
+    quantity,
+    avgPrice: quantity ? cost / quantity : 0,
+  }));
 }
 
 export function usePortfolio() {
   const { user } = useAuth();
+  const { isPremium } = useProfile();
   const [lists, setLists] = useState<PortfolioMeta[]>([]);
   const [activePortfolioId, setActivePortfolioId] = useState<string | null>(null);
-  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [lots, setLots] = useState<Lot[]>([]);
   const [ready, setReady] = useState(false);
   const [supabase] = useState(() => createClient());
 
@@ -42,7 +87,7 @@ export function usePortfolio() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting local state when the user signs out
       setLists([]);
       setActivePortfolioId(null);
-      setHoldings([]);
+      setLots([]);
 
       setReady(false);
       return;
@@ -61,41 +106,62 @@ export function usePortfolio() {
         setLists(fetchedLists);
 
         const stored = typeof window !== "undefined" ? window.localStorage.getItem(ACTIVE_KEY) : null;
-        const activeId = fetchedLists.find((l) => l.id === stored)?.id ?? fetchedLists[0]?.id ?? null;
+        const storedIsValid = stored === SUMMARY_ID ? isPremium && fetchedLists.length > 1 : fetchedLists.some((l) => l.id === stored);
+        const activeId = storedIsValid
+          ? stored
+          : isPremium && fetchedLists.length > 1
+            ? SUMMARY_ID
+            : fetchedLists[0]?.id ?? null;
         setActivePortfolioId(activeId);
 
         if (!activeId) {
-          setHoldings([]);
+          setLots([]);
           setReady(true);
           return;
         }
 
+        const portfolioIds = activeId === SUMMARY_ID ? fetchedLists.map((l) => l.id) : [activeId];
+        if (portfolioIds.length === 0) {
+          setLots([]);
+          setReady(true);
+          return;
+        }
         const { data: items } = await supabase
           .from("portfolio_holdings")
-          .select("id, symbol, quantity, avg_price, buy_date")
-          .eq("portfolio_id", activeId)
+          .select(LOT_COLUMNS)
+          .in("portfolio_id", portfolioIds)
           .order("created_at", { ascending: false });
         if (cancelled) return;
-        setHoldings((items ?? []).map(toHolding));
+        setLots((items ?? []).map(toLot));
         setReady(true);
       });
 
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isPremium intentionally only used for the initial default-selection decision
   }, [user, supabase]);
+
+  async function loadLots(portfolioIds: string[]) {
+    if (portfolioIds.length === 0) {
+      setLots([]);
+      return;
+    }
+    const { data: items } = await supabase
+      .from("portfolio_holdings")
+      .select(LOT_COLUMNS)
+      .in("portfolio_id", portfolioIds)
+      .order("created_at", { ascending: false });
+    setLots((items ?? []).map(toLot));
+  }
 
   async function switchPortfolio(portfolioId: string) {
     if (portfolioId === activePortfolioId) return;
     setActivePortfolioId(portfolioId);
     if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_KEY, portfolioId);
     setReady(false);
-    const { data: items } = await supabase
-      .from("portfolio_holdings")
-      .select("id, symbol, quantity, avg_price, buy_date")
-      .eq("portfolio_id", portfolioId)
-      .order("created_at", { ascending: false });
-    setHoldings((items ?? []).map(toHolding));
+    const portfolioIds = portfolioId === SUMMARY_ID ? lists.map((l) => l.id) : [portfolioId];
+    await loadLots(portfolioIds);
     setReady(true);
   }
 
@@ -138,11 +204,12 @@ export function usePortfolio() {
       };
     }
     if (id === activePortfolioId) await switchPortfolio(remaining[0].id);
+    else if (activePortfolioId === SUMMARY_ID) await loadLots(remaining.map((l) => l.id));
     return {};
   }
 
-  async function addHolding(input: NewHolding): Promise<{ error?: string }> {
-    if (!user || !activePortfolioId) return { error: "Not signed in" };
+  async function buyHolding(input: NewHolding): Promise<{ error?: string }> {
+    if (!user || !activePortfolioId || activePortfolioId === SUMMARY_ID) return { error: "Select a single portfolio first" };
 
     const { data, error } = await supabase
       .from("portfolio_holdings")
@@ -154,36 +221,100 @@ export function usePortfolio() {
         avg_price: input.avgPrice,
         buy_date: input.buyDate,
       })
-      .select("id, symbol, quantity, avg_price, buy_date")
+      .select(LOT_COLUMNS)
       .single();
 
     if (error || !data) return { error: error?.message ?? "Failed to add holding" };
 
-    setHoldings((prev) => [toHolding(data), ...prev]);
+    setLots((prev) => [toLot(data), ...prev]);
     return {};
   }
 
-  async function removeHolding(id: string): Promise<{ error?: string }> {
-    const previous = holdings;
-    setHoldings((prev) => prev.filter((h) => h.id !== id));
-    const { error } = await supabase.from("portfolio_holdings").delete().eq("id", id);
+  async function sellHolding(symbol: string, quantity: number): Promise<{ error?: string }> {
+    if (!activePortfolioId || activePortfolioId === SUMMARY_ID) return { error: "Select a single portfolio first" };
+    if (quantity <= 0) return { error: "Enter a quantity greater than zero." };
+
+    const symbolLots = lots
+      .filter((l) => l.portfolioId === activePortfolioId && l.symbol === symbol)
+      .sort((a, b) => (a.buyDate === b.buyDate ? a.createdAt.localeCompare(b.createdAt) : a.buyDate.localeCompare(b.buyDate)));
+
+    const heldQuantity = symbolLots.reduce((sum, l) => sum + l.quantity, 0);
+    if (quantity > heldQuantity) return { error: "Cannot sell more than you hold." };
+
+    let remaining = quantity;
+    const updates: { id: string; quantity: number }[] = [];
+    const deletes: string[] = [];
+
+    for (const lot of symbolLots) {
+      if (remaining <= 0) break;
+      if (lot.quantity <= remaining) {
+        deletes.push(lot.id);
+        remaining -= lot.quantity;
+      } else {
+        updates.push({ id: lot.id, quantity: lot.quantity - remaining });
+        remaining = 0;
+      }
+    }
+
+    const previous = lots;
+    setLots((prev) =>
+      prev
+        .filter((l) => !deletes.includes(l.id))
+        .map((l) => {
+          const update = updates.find((u) => u.id === l.id);
+          return update ? { ...l, quantity: update.quantity } : l;
+        })
+    );
+
+    if (deletes.length > 0) {
+      const { error } = await supabase.from("portfolio_holdings").delete().in("id", deletes);
+      if (error) {
+        setLots(previous);
+        return { error: error.message };
+      }
+    }
+    for (const update of updates) {
+      const { error } = await supabase.from("portfolio_holdings").update({ quantity: update.quantity }).eq("id", update.id);
+      if (error) {
+        setLots(previous);
+        return { error: error.message };
+      }
+    }
+
+    return {};
+  }
+
+  async function deletePosition(symbol: string): Promise<{ error?: string }> {
+    if (!activePortfolioId || activePortfolioId === SUMMARY_ID) return { error: "Select a single portfolio first" };
+    const previous = lots;
+    setLots((prev) => prev.filter((l) => !(l.portfolioId === activePortfolioId && l.symbol === symbol)));
+    const { error } = await supabase
+      .from("portfolio_holdings")
+      .delete()
+      .eq("portfolio_id", activePortfolioId)
+      .eq("symbol", symbol);
     if (error) {
-      setHoldings(previous);
+      setLots(previous);
       return { error: error.message };
     }
     return {};
   }
 
+  const positions = useMemo(() => aggregatePositions(lots), [lots]);
+
   return {
     lists,
     activePortfolioId,
+    isSummary: activePortfolioId === SUMMARY_ID,
     switchPortfolio,
     createPortfolio,
     renamePortfolio,
     deletePortfolio,
-    holdings,
+    lots,
+    positions,
     ready,
-    addHolding,
-    removeHolding,
+    buyHolding,
+    sellHolding,
+    deletePosition,
   };
 }
