@@ -2,26 +2,24 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { useAuth } from "@/lib/auth";
 import AuthShell from "@/components/AuthShell";
 import Captcha from "@/components/Captcha";
 
-export default function LoginPage() {
-  const { login } = useAuth();
-  const router = useRouter();
+export default function ForgotPasswordPage() {
+  const { requestPasswordReset } = useAuth();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [sent, setSent] = useState(false);
   const captchaRef = useRef<TurnstileInstance>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email || !password) {
-      setError("Enter both email and password.");
+    if (!email) {
+      setError("Enter your email address.");
       return;
     }
     if (!captchaToken) {
@@ -31,18 +29,34 @@ export default function LoginPage() {
     setError("");
     setSubmitting(true);
     try {
-      await login(email, password, captchaToken);
-      router.push("/dashboard");
+      await requestPasswordReset(email, captchaToken);
+      setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to log in.");
+      setError(err instanceof Error ? err.message : "Failed to send reset email.");
       setSubmitting(false);
       captchaRef.current?.reset();
       setCaptchaToken("");
     }
   }
 
+  if (sent) {
+    return (
+      <AuthShell title="Check your email" subtitle="We've sent you a password reset link">
+        <p className="text-sm text-foreground/70">
+          If an account exists for <span className="font-medium">{email}</span>, you&apos;ll
+          receive an email with a link to reset your password.
+        </p>
+        <p className="text-sm text-foreground/60 mt-6">
+          <Link href="/login" className="text-brand font-medium hover:underline">
+            Back to log in
+          </Link>
+        </p>
+      </AuthShell>
+    );
+  }
+
   return (
-    <AuthShell title="Welcome back" subtitle="Log in to your Bot17 account">
+    <AuthShell title="Reset your password" subtitle="We'll email you a link to reset it">
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Email">
           <input
@@ -54,23 +68,6 @@ export default function LoginPage() {
             className="w-full rounded-lg border border-line bg-surface text-foreground px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
           />
         </Field>
-        <Field
-          label="Password"
-          action={
-            <Link href="/forgot-password" className="text-brand font-medium hover:underline">
-              Forgot password?
-            </Link>
-          }
-        >
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            className="w-full rounded-lg border border-line bg-surface text-foreground px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-          />
-        </Field>
         <Captcha ref={captchaRef} onVerify={setCaptchaToken} />
         {error && <p className="text-sm text-down">{error}</p>}
         <button
@@ -78,35 +75,24 @@ export default function LoginPage() {
           disabled={submitting}
           className="w-full rounded-lg bg-brand text-white text-sm font-semibold py-2.5 hover:bg-brand/90 transition-colors disabled:opacity-60"
         >
-          {submitting ? "Signing in…" : "Log in"}
+          {submitting ? "Sending…" : "Send reset link"}
         </button>
       </form>
       <p className="text-sm text-foreground/60 mt-6">
-        Don&apos;t have an account?{" "}
-        <Link href="/signup" className="text-brand font-medium hover:underline">
-          Sign up
+        Remembered your password?{" "}
+        <Link href="/login" className="text-brand font-medium hover:underline">
+          Log in
         </Link>
       </p>
     </AuthShell>
   );
 }
 
-function Field({
-  label,
-  action,
-  children,
-}: {
-  label: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="block">
-      <span className="flex items-center justify-between mb-1.5">
-        <span className="text-xs font-semibold text-foreground/70">{label}</span>
-        {action && <span className="text-xs">{action}</span>}
-      </span>
-      <label className="block">{children}</label>
-    </div>
+    <label className="block">
+      <span className="block text-xs font-semibold text-foreground/70 mb-1.5">{label}</span>
+      {children}
+    </label>
   );
 }

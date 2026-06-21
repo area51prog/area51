@@ -23,6 +23,8 @@ interface AuthContextValue {
   login: (email: string, password: string, captchaToken: string) => Promise<void>;
   signup: (name: string, email: string, password: string, captchaToken: string) => Promise<void>;
   logout: () => Promise<void>;
+  requestPasswordReset: (email: string, captchaToken: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -87,8 +89,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }
 
+  async function requestPasswordReset(email: string, captchaToken: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+      captchaToken,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  async function updatePassword(password: string) {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw new Error(error.message);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, signup, logout, requestPasswordReset, updatePassword }}
+    >
       {children}
     </AuthContext.Provider>
   );
