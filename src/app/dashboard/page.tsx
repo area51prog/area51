@@ -1,18 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { usePortfolio } from "@/lib/usePortfolio";
 import { useWatchlist } from "@/lib/useWatchlist";
-import { getStock } from "@/lib/mock-data";
+import { getStock, getPortfolioHistory, PortfolioRange } from "@/lib/mock-data";
 import { useQuotes } from "@/lib/useQuotes";
 import { withLiveQuote } from "@/lib/liveStock";
 import { formatDate, formatINRCompact } from "@/lib/format";
 import { Card, ChangeBadge, LiveBadge, PriceAreaChart } from "@/components/ui";
 import { ArrowUpRight, Wallet, FileSearch } from "lucide-react";
 
+const PORTFOLIO_RANGES: PortfolioRange[] = ["1D", "1W", "1Y", "5Y"];
+
 export default function OverviewPage() {
   const { user } = useAuth();
+  const [range, setRange] = useState<PortfolioRange>("1Y");
   const { holdings, ready: portfolioReady } = usePortfolio();
   const { symbols: watchlistSymbols, ready: watchlistReady } = useWatchlist();
   const { quotes, sources } = useQuotes(holdings.map((h) => h.symbol));
@@ -36,7 +40,7 @@ export default function OverviewPage() {
   const totalGainPct = totalInvested ? (totalGain / totalInvested) * 100 : 0;
   const dayChangePct = totalValue - totalDayChange ? (totalDayChange / (totalValue - totalDayChange)) * 100 : 0;
 
-  const benchmarkHistory = getStock("RELIANCE")!.history;
+  const wealthHistory = getPortfolioHistory(totalValue, range);
 
   const recentActivity = [...holdings]
     .sort((a, b) => b.buyDate.localeCompare(a.buyDate))
@@ -53,16 +57,18 @@ export default function OverviewPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <div className="flex items-center justify-between text-xs font-semibold text-foreground/50 uppercase tracking-wide">
-            <span className="flex items-center gap-2"><Wallet size={14} /> Portfolio value</span>
-            {rows.length > 0 && (
-              <LiveBadge source={rows.map((r) => sources[r.h.symbol]).find((s) => s && s !== "mock") ?? "mock"} />
-            )}
-          </div>
-          <div className="text-2xl font-bold text-heading mt-2">{formatINRCompact(totalValue)}</div>
-          <div className="mt-1"><ChangeBadge percent={dayChangePct} value={totalDayChange} /></div>
-        </Card>
+        <Link href="/dashboard/portfolio" className="block">
+          <Card className="h-full transition-colors hover:border-brand/40 hover:bg-background/40">
+            <div className="flex items-center justify-between text-xs font-semibold text-foreground/50 uppercase tracking-wide">
+              <span className="flex items-center gap-2"><Wallet size={14} /> Portfolio value</span>
+              {rows.length > 0 && (
+                <LiveBadge source={rows.map((r) => sources[r.h.symbol]).find((s) => s && s !== "mock") ?? "mock"} />
+              )}
+            </div>
+            <div className="text-2xl font-bold text-heading mt-2">{formatINRCompact(totalValue)}</div>
+            <div className="mt-1"><ChangeBadge percent={dayChangePct} value={totalDayChange} /></div>
+          </Card>
+        </Link>
         <Card>
           <div className="text-xs font-semibold text-foreground/50 uppercase tracking-wide">Total invested</div>
           <div className="text-2xl font-bold text-heading mt-2">{formatINRCompact(totalInvested)}</div>
@@ -86,8 +92,27 @@ export default function OverviewPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card title="Market snapshot — Reliance Industries" className="lg:col-span-2">
-          <PriceAreaChart data={benchmarkHistory} />
+        <Card
+          title="Your Wealth Today"
+          className="lg:col-span-2"
+          action={
+            <div className="flex items-center gap-1 rounded-lg bg-background/60 p-0.5">
+              {PORTFOLIO_RANGES.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                    range === r ? "bg-brand text-white" : "text-foreground/50 hover:text-foreground"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <div className="text-xl font-bold text-heading mb-2">{formatINRCompact(totalValue)}</div>
+          <PriceAreaChart data={wealthHistory} />
         </Card>
         <Card title="Run equity research" className="flex flex-col">
           <p className="text-sm text-foreground/60 flex-1">

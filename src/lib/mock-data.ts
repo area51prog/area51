@@ -16,6 +16,31 @@ function genHistory(base: number, drift: number, points = 12) {
   });
 }
 
+export type PortfolioRange = "1D" | "1W" | "1Y" | "5Y";
+
+const PORTFOLIO_RANGE_CONFIG: Record<PortfolioRange, { labels: string[]; volatility: number }> = {
+  "1D": { labels: ["9:15", "10:15", "11:15", "12:15", "1:15", "2:15", "3:30"], volatility: 0.004 },
+  "1W": { labels: ["Mon", "Tue", "Wed", "Thu", "Fri"], volatility: 0.012 },
+  "1Y": { labels: MONTHS, volatility: 0.03 },
+  "5Y": { labels: Array.from({ length: 5 }, (_, i) => `${new Date().getFullYear() - 4 + i}`), volatility: 0.08 },
+};
+
+export function getPortfolioHistory(currentValue: number, range: PortfolioRange) {
+  const { labels, volatility } = PORTFOLIO_RANGE_CONFIG[range];
+  let p = 1;
+  const multipliers = labels.map((_, i) => {
+    const seed = Math.sin(i * 12.9898 + currentValue) * 43758.5453;
+    const noise = (seed - Math.floor(seed) - 0.5) * 2;
+    p = p * (1 + noise * volatility);
+    return p;
+  });
+  const last = multipliers[multipliers.length - 1] || 1;
+  return labels.map((date, i) => ({
+    date,
+    price: Math.round((multipliers[i] / last) * currentValue * 100) / 100,
+  }));
+}
+
 function stock(
   symbol: string,
   name: string,
