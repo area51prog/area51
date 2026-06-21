@@ -35,6 +35,15 @@ export default function PortfolioPage() {
   const [adding, setAdding] = useState(false);
   const [editingSymbol, setEditingSymbol] = useState<string | null>(null);
 
+  // Close any open Add / Buy-Sell form when the selected portfolio changes (incl. switching
+  // to/from Summary) — those forms act on a specific portfolio and shouldn't linger.
+  const [prevPortfolioId, setPrevPortfolioId] = useState(activePortfolioId);
+  if (activePortfolioId !== prevPortfolioId) {
+    setPrevPortfolioId(activePortfolioId);
+    setAdding(false);
+    setEditingSymbol(null);
+  }
+
   const rows = positions.map((p) => {
     const baseStock = getStock(p.symbol);
     const s = baseStock ? withLiveQuote(baseStock, quotes[p.symbol]) : null;
@@ -345,8 +354,8 @@ function BuySellForm({
 }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [quantity, setQuantity] = useState("");
-  const [avgPrice, setAvgPrice] = useState("");
-  const [buyDate, setBuyDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [price, setPrice] = useState("");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -357,16 +366,15 @@ function BuySellForm({
       setError("Enter a valid quantity.");
       return;
     }
+    const priceValue = Number(price);
+    if (!priceValue || priceValue < 0 || !date) {
+      setError(`Enter a valid ${side} price and ${side} date.`);
+      return;
+    }
     setError("");
     setSubmitting(true);
     if (side === "buy") {
-      const price = Number(avgPrice);
-      if (!price || price < 0 || !buyDate) {
-        setError("Enter a valid price and buy date.");
-        setSubmitting(false);
-        return;
-      }
-      const { error: buyError } = await onBuy({ symbol, quantity: qty, avgPrice: price, buyDate });
+      const { error: buyError } = await onBuy({ symbol, quantity: qty, avgPrice: priceValue, buyDate: date });
       setSubmitting(false);
       if (buyError) {
         setError(buyError);
@@ -411,31 +419,31 @@ function BuySellForm({
             className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
           />
         </label>
-        {side === "buy" && (
-          <>
-            <label className="block">
-              <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Buy price (₹)</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={avgPrice}
-                onChange={(e) => setAvgPrice(e.target.value)}
-                placeholder="e.g. 1295.40"
-                className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-              />
-            </label>
-            <label className="block">
-              <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Buy date</span>
-              <input
-                type="date"
-                value={buyDate}
-                onChange={(e) => setBuyDate(e.target.value)}
-                className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-              />
-            </label>
-          </>
-        )}
+        <label className="block">
+          <span className="block text-xs font-semibold text-foreground/70 mb-1.5">
+            {side === "buy" ? "Buy" : "Sell"} price (₹)
+          </span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="e.g. 1295.40"
+            className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs font-semibold text-foreground/70 mb-1.5">
+            {side === "buy" ? "Buy" : "Sell"} date
+          </span>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+          />
+        </label>
         {error && <p className="text-sm text-down sm:col-span-4">{error}</p>}
         <div className="sm:col-span-4 flex gap-2">
           <button
