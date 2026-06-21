@@ -12,7 +12,7 @@ import { formatDate, formatINRCompact } from "@/lib/format";
 import { Card, ChangeBadge, LiveBadge, PriceAreaChart } from "@/components/ui";
 import { ArrowUpRight, Wallet, FileSearch } from "lucide-react";
 
-const PORTFOLIO_RANGES: PortfolioRange[] = ["1D", "1W", "1Y", "5Y"];
+const PORTFOLIO_RANGES: PortfolioRange[] = ["1D", "1W", "1M", "1Y", "5Y"];
 
 export default function OverviewPage() {
   const { user } = useAuth();

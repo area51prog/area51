@@ -16,11 +16,12 @@ function genHistory(base: number, drift: number, points = 12) {
   });
 }
 
-export type PortfolioRange = "1D" | "1W" | "1Y" | "5Y";
+export type PortfolioRange = "1D" | "1W" | "1M" | "1Y" | "5Y";
 
 const PORTFOLIO_RANGE_CONFIG: Record<PortfolioRange, { labels: string[]; volatility: number }> = {
   "1D": { labels: ["9:15", "10:15", "11:15", "12:15", "1:15", "2:15", "3:30"], volatility: 0.004 },
   "1W": { labels: ["Mon", "Tue", "Wed", "Thu", "Fri"], volatility: 0.012 },
+  "1M": { labels: Array.from({ length: 4 }, (_, i) => `Wk ${i + 1}`), volatility: 0.02 },
   "1Y": { labels: MONTHS, volatility: 0.03 },
   "5Y": { labels: Array.from({ length: 5 }, (_, i) => `${new Date().getFullYear() - 4 + i}`), volatility: 0.08 },
 };
