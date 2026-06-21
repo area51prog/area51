@@ -14,10 +14,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const TITLE = "Bot17 — Indian Markets Investing";
+const DESCRIPTION =
+  "Track Indian stocks, manage your portfolio, get AI equity research, and stay ahead of dividends.";
+
 export const metadata: Metadata = {
-  title: "Bot17 — Indian Markets Investing",
-  description:
-    "Track Indian stocks, manage your portfolio, get AI equity research, and stay ahead of dividends.",
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    siteName: "Bot17",
+  },
+  twitter: {
+    card: "summary",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export default function RootLayout({
