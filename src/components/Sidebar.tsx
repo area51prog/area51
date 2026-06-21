@@ -65,13 +65,18 @@ export default function Sidebar() {
           <Settings size={18} />
           Settings
         </Link>
-        <a
-          href="#"
-          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/60 hover:bg-background hover:text-foreground"
+        <Link
+          href="/dashboard/support"
+          className={clsx(
+            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+            pathname.startsWith("/dashboard/support")
+              ? "bg-brand-light text-brand"
+              : "text-foreground/60 hover:bg-background hover:text-foreground"
+          )}
         >
           <LifeBuoy size={18} />
           Support
-        </a>
+        </Link>
       </div>
     </aside>
   );

@@ -13,6 +13,7 @@ const TITLES: Record<string, string> = {
   "/dashboard/research": "Research",
   "/dashboard/dividends": "Dividend calendar",
   "/dashboard/settings": "Account settings",
+  "/dashboard/support": "Support",
 };
 
 function titleFor(pathname: string) {
