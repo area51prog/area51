@@ -28,9 +28,9 @@ export default function Sidebar() {
     <aside className="hidden md:flex w-60 flex-none flex-col border-r border-line bg-surface">
       <div className="h-16 flex items-center gap-2 px-6 font-bold text-lg text-heading tracking-tight">
         <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-white text-xs">
-          A51
+          B17
         </span>
-        Area51
+        Bot17
       </div>
       <nav className="flex-1 px-3 py-2 space-y-0.5">
         {NAV.map(({ href, label, icon: Icon }) => {

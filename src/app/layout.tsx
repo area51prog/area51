@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Area51 — Indian Markets Investing",
+  title: "Bot17 — Indian Markets Investing",
   description:
     "Track Indian stocks, manage your portfolio, get AI equity research, and stay ahead of dividends.",
 };

@@ -42,7 +42,7 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthShell title="Welcome back" subtitle="Log in to your Area51 account">
+    <AuthShell title="Welcome back" subtitle="Log in to your Bot17 account">
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Email">
           <input

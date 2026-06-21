@@ -15,7 +15,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-1 items-center justify-center min-h-screen bg-background">
-      <div className="text-sm text-foreground/50">Loading Area51…</div>
+      <div className="text-sm text-foreground/50">Loading Bot17…</div>
     </div>
   );
 }
