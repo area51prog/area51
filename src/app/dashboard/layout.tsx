@@ -10,6 +10,7 @@ const TITLES: Record<string, string> = {
   "/dashboard": "Overview",
   "/dashboard/watchlist": "Watchlist",
   "/dashboard/portfolio": "Portfolio",
+  "/dashboard/transactions": "Transaction history",
   "/dashboard/research": "Research",
   "/dashboard/dividends": "Dividend calendar",
   "/dashboard/settings": "Account settings",

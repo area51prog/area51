@@ -349,7 +349,7 @@ function BuySellForm({
   symbol: string;
   position: Position | null;
   onBuy: (input: { symbol: string; quantity: number; avgPrice: number; buyDate: string }) => Promise<{ error?: string }>;
-  onSell: (symbol: string, quantity: number) => Promise<{ error?: string }>;
+  onSell: (symbol: string, quantity: number, price: number, sellDate: string) => Promise<{ error?: string }>;
   onDone: () => void;
 }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -381,7 +381,7 @@ function BuySellForm({
         return;
       }
     } else {
-      const { error: sellError } = await onSell(symbol, qty);
+      const { error: sellError } = await onSell(symbol, qty, priceValue, date);
       setSubmitting(false);
       if (sellError) {
         setError(sellError);

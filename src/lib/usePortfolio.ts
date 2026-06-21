@@ -211,6 +211,27 @@ export function usePortfolio() {
     return {};
   }
 
+  async function logTransaction(input: {
+    symbol: string;
+    side: "buy" | "sell";
+    quantity: number;
+    price: number;
+    txnDate: string;
+    realizedPnl: number | null;
+  }) {
+    if (!user || !activePortfolioId || activePortfolioId === SUMMARY_ID) return;
+    await supabase.from("transactions").insert({
+      user_id: user.id,
+      portfolio_id: activePortfolioId,
+      symbol: input.symbol,
+      side: input.side,
+      quantity: input.quantity,
+      price: input.price,
+      txn_date: input.txnDate,
+      realized_pnl: input.realizedPnl,
+    });
+  }
+
   async function buyHolding(input: NewHolding): Promise<{ error?: string }> {
     if (!user || !activePortfolioId || activePortfolioId === SUMMARY_ID) return { error: "Select a single portfolio first" };
 
@@ -230,10 +251,18 @@ export function usePortfolio() {
     if (error || !data) return { error: error?.message ?? "Failed to add holding" };
 
     setLots((prev) => [toLot(data), ...prev]);
+    await logTransaction({
+      symbol: input.symbol,
+      side: "buy",
+      quantity: input.quantity,
+      price: input.avgPrice,
+      txnDate: input.buyDate,
+      realizedPnl: null,
+    });
     return {};
   }
 
-  async function sellHolding(symbol: string, quantity: number): Promise<{ error?: string }> {
+  async function sellHolding(symbol: string, quantity: number, price: number, sellDate: string): Promise<{ error?: string }> {
     if (!activePortfolioId || activePortfolioId === SUMMARY_ID) return { error: "Select a single portfolio first" };
     if (quantity <= 0) return { error: "Enter a quantity greater than zero." };
 
@@ -245,6 +274,7 @@ export function usePortfolio() {
     if (quantity > heldQuantity) return { error: "Cannot sell more than you hold." };
 
     let remaining = quantity;
+    let realizedPnl = 0;
     const updates: { id: string; quantity: number }[] = [];
     const deletes: string[] = [];
 
@@ -253,8 +283,10 @@ export function usePortfolio() {
       if (lot.quantity <= remaining) {
         deletes.push(lot.id);
         remaining -= lot.quantity;
+        realizedPnl += (price - lot.avgPrice) * lot.quantity;
       } else {
         updates.push({ id: lot.id, quantity: lot.quantity - remaining });
+        realizedPnl += (price - lot.avgPrice) * remaining;
         remaining = 0;
       }
     }
@@ -284,6 +316,7 @@ export function usePortfolio() {
       }
     }
 
+    await logTransaction({ symbol, side: "sell", quantity, price, txnDate: sellDate, realizedPnl });
     return {};
   }
 

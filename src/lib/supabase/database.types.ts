@@ -139,6 +139,53 @@ export type Database = {
         }
         Relationships: []
       }
+      transactions: {
+        Row: {
+          created_at: string
+          id: string
+          portfolio_id: string
+          price: number
+          quantity: number
+          realized_pnl: number | null
+          side: string
+          symbol: string
+          txn_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          portfolio_id: string
+          price: number
+          quantity: number
+          realized_pnl?: number | null
+          side: string
+          symbol: string
+          txn_date?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          portfolio_id?: string
+          price?: number
+          quantity?: number
+          realized_pnl?: number | null
+          side?: string
+          symbol?: string
+          txn_date?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_portfolio_id_fkey"
+            columns: ["portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       watchlist: {
         Row: {
           created_at: string

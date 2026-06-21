@@ -8,6 +8,7 @@ import {
   Briefcase,
   FileSearch,
   CalendarClock,
+  History,
   Settings,
   LifeBuoy,
   Lock,
@@ -19,6 +20,7 @@ const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, premium: false },
   { href: "/dashboard/watchlist", label: "Watchlist", icon: Eye, premium: false },
   { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase, premium: false },
+  { href: "/dashboard/transactions", label: "Transactions", icon: History, premium: false },
   { href: "/dashboard/research", label: "Research", icon: FileSearch, premium: true },
   { href: "/dashboard/dividends", label: "Dividends", icon: CalendarClock, premium: true },
 ];

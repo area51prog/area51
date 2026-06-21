@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Eye, Briefcase, FileSearch, CalendarClock, Lock } from "lucide-react";
+import { LayoutDashboard, Eye, Briefcase, FileSearch, CalendarClock, History, Lock } from "lucide-react";
 import clsx from "clsx";
 import { useProfile } from "@/lib/useProfile";
 
@@ -10,6 +10,7 @@ const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, premium: false },
   { href: "/dashboard/watchlist", label: "Watchlist", icon: Eye, premium: false },
   { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase, premium: false },
+  { href: "/dashboard/transactions", label: "Transactions", icon: History, premium: false },
   { href: "/dashboard/research", label: "Research", icon: FileSearch, premium: true },
   { href: "/dashboard/dividends", label: "Dividends", icon: CalendarClock, premium: true },
 ];
