@@ -17,7 +17,7 @@ export default function StockDetailPage() {
   const symbol = params.symbol;
   const baseStock = getStock(symbol);
   const { symbols, toggle } = useWatchlist();
-  const { holdings } = usePortfolio();
+  const { positions } = usePortfolio();
   const { quotes, sources, loading } = useQuotes(baseStock ? [baseStock.symbol] : []);
 
   if (!baseStock) return notFound();
@@ -28,7 +28,7 @@ export default function StockDetailPage() {
   const pct = ((stock.price - stock.prevClose) / stock.prevClose) * 100;
   const change = stock.price - stock.prevClose;
   const inWatchlist = symbols.includes(stock.symbol);
-  const holding = holdings.find((h) => h.symbol === stock.symbol);
+  const holding = positions.find((p) => p.symbol === stock.symbol);
 
   return (
     <div className="space-y-5">

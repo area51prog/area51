@@ -9,10 +9,10 @@ import { Card } from "@/components/ui";
 const TODAY = new Date("2026-06-20");
 
 export default function DividendsPage() {
-  const { holdings, ready } = usePortfolio();
-  const held = new Set(holdings.map((h) => h.symbol));
+  const { positions, ready } = usePortfolio();
+  const held = new Set(positions.map((p) => p.symbol));
   const events = DIVIDENDS.filter((d) => held.has(d.symbol)).flatMap((d) => {
-    const holding = holdings.find((h) => h.symbol === d.symbol);
+    const holding = positions.find((p) => p.symbol === d.symbol);
     const stock = getStock(d.symbol);
     if (!holding || !stock) return [];
     const total = d.amountPerShare * holding.quantity;
@@ -34,7 +34,7 @@ export default function DividendsPage() {
 
   if (!ready) return null;
 
-  if (holdings.length === 0) {
+  if (positions.length === 0) {
     return (
       <Card>
         <p className="text-sm text-foreground/50 py-10 text-center">
@@ -73,7 +73,7 @@ export default function DividendsPage() {
         <Card>
           <div className="text-xs font-semibold text-foreground/50 uppercase tracking-wide">Dividend-paying holdings</div>
           <div className="text-2xl font-bold text-heading mt-2">
-            {new Set(events.map((e) => e.symbol)).size} / {holdings.length}
+            {new Set(events.map((e) => e.symbol)).size} / {positions.length}
           </div>
           <div className="text-xs text-foreground/50 mt-1">stocks in your portfolio</div>
         </Card>

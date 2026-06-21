@@ -18,20 +18,20 @@ const PORTFOLIO_RANGES: PortfolioRange[] = ["1D", "1W", "1M", "1Y", "5Y"];
 export default function OverviewPage() {
   const { user } = useAuth();
   const [range, setRange] = useState<PortfolioRange>("1Y");
-  const { holdings, ready: portfolioReady } = usePortfolio();
+  const { positions, lots, ready: portfolioReady } = usePortfolio();
   const { symbols: watchlistSymbols, ready: watchlistReady } = useWatchlist();
-  const { quotes, sources } = useQuotes(holdings.map((h) => h.symbol));
+  const { quotes, sources } = useQuotes(positions.map((p) => p.symbol));
   const generatedReports = useAllGeneratedReports();
 
-  const rows = holdings
-    .map((h) => {
-      const baseStock = getStock(h.symbol);
+  const rows = positions
+    .map((p) => {
+      const baseStock = getStock(p.symbol);
       if (!baseStock) return null;
-      const s = withLiveQuote(baseStock, quotes[h.symbol]);
-      const invested = h.avgPrice * h.quantity;
-      const value = s.price * h.quantity;
-      const dayChange = (s.price - s.prevClose) * h.quantity;
-      return { h, s, invested, value, dayChange };
+      const s = withLiveQuote(baseStock, quotes[p.symbol]);
+      const invested = p.avgPrice * p.quantity;
+      const value = s.price * p.quantity;
+      const dayChange = (s.price - s.prevClose) * p.quantity;
+      return { p, s, invested, value, dayChange };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
@@ -54,10 +54,10 @@ export default function OverviewPage() {
     .sort((a, b) => b.report.generatedOn.localeCompare(a.report.generatedOn) || b.rank - a.rank)
     .slice(0, 5);
 
-  const recentActivity = [...holdings]
+  const recentActivity = [...lots]
     .sort((a, b) => b.buyDate.localeCompare(a.buyDate))
     .slice(0, 5)
-    .map((h) => ({ id: h.id, symbol: h.symbol, date: h.buyDate, amount: h.avgPrice * h.quantity, quantity: h.quantity }));
+    .map((l) => ({ id: l.id, symbol: l.symbol, date: l.buyDate, amount: l.avgPrice * l.quantity, quantity: l.quantity }));
 
   if (!portfolioReady || !watchlistReady) return null;
 
@@ -74,7 +74,7 @@ export default function OverviewPage() {
             <div className="flex items-center justify-between text-xs font-semibold text-foreground/50 uppercase tracking-wide">
               <span className="flex items-center gap-2"><Wallet size={14} /> Portfolio value</span>
               {rows.length > 0 && (
-                <LiveBadge source={rows.map((r) => sources[r.h.symbol]).find((s) => s && s !== "mock") ?? "mock"} />
+                <LiveBadge source={rows.map((r) => sources[r.p.symbol]).find((s) => s && s !== "mock") ?? "mock"} />
               )}
             </div>
             <div className="text-2xl font-bold text-heading mt-2">{formatINRCompact(totalValue)}</div>
@@ -173,17 +173,17 @@ export default function OverviewPage() {
               {rows
                 .sort((a, b) => b.value - a.value)
                 .slice(0, 5)
-                .map(({ h, s, value }) => {
+                .map(({ p, s, value }) => {
                   const pct = ((s.price - s.prevClose) / s.prevClose) * 100;
                   return (
                     <Link
-                      key={h.id}
-                      href={`/dashboard/stocks/${h.symbol}`}
+                      key={p.symbol}
+                      href={`/dashboard/stocks/${p.symbol}`}
                       className="flex items-center justify-between py-3 hover:bg-background/60 rounded-lg px-2 -mx-2"
                     >
                       <div>
                         <div className="text-sm font-semibold text-heading">{s.symbol}</div>
-                        <div className="text-xs text-foreground/50">{h.quantity} shares</div>
+                        <div className="text-xs text-foreground/50">{p.quantity} shares</div>
                       </div>
                       <div className="text-right">
                         <div className="text-sm font-semibold">{formatINRCompact(value)}</div>
