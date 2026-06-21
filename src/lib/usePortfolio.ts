@@ -112,6 +112,35 @@ export function usePortfolio() {
     return {};
   }
 
+  async function renamePortfolio(id: string, name: string): Promise<{ error?: string }> {
+    const previous = lists;
+    setLists((prev) => prev.map((l) => (l.id === id ? { ...l, name } : l)));
+    const { error } = await supabase.from("portfolios").update({ name }).eq("id", id);
+    if (error) {
+      setLists(previous);
+      return { error: error.message };
+    }
+    return {};
+  }
+
+  async function deletePortfolio(id: string): Promise<{ error?: string }> {
+    if (lists.length <= 1) return { error: "You must keep at least one portfolio." };
+    const previous = lists;
+    const remaining = lists.filter((l) => l.id !== id);
+    setLists(remaining);
+    const { error } = await supabase.from("portfolios").delete().eq("id", id);
+    if (error) {
+      setLists(previous);
+      return {
+        error: error.message.includes("last_list_blocked")
+          ? "You must keep at least one portfolio."
+          : error.message,
+      };
+    }
+    if (id === activePortfolioId) await switchPortfolio(remaining[0].id);
+    return {};
+  }
+
   async function addHolding(input: NewHolding): Promise<{ error?: string }> {
     if (!user || !activePortfolioId) return { error: "Not signed in" };
 
@@ -150,6 +179,8 @@ export function usePortfolio() {
     activePortfolioId,
     switchPortfolio,
     createPortfolio,
+    renamePortfolio,
+    deletePortfolio,
     holdings,
     ready,
     addHolding,

@@ -11,7 +11,8 @@ import { Card, ChangeBadge, LiveBadge } from "@/components/ui";
 import { ListSwitcher } from "@/components/ListSwitcher";
 
 export default function WatchlistPage() {
-  const { lists, activeListId, switchList, createList, symbols, ready, remove, add } = useWatchlist();
+  const { lists, activeListId, switchList, createList, renameList, deleteList, symbols, ready, remove, add } =
+    useWatchlist();
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const [addError, setAddError] = useState("");
@@ -31,7 +32,15 @@ export default function WatchlistPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <ListSwitcher lists={lists} activeId={activeListId} onSwitch={switchList} onCreate={createList} noun="watchlist" />
+          <ListSwitcher
+            lists={lists}
+            activeId={activeListId}
+            onSwitch={switchList}
+            onCreate={createList}
+            onRename={renameList}
+            onDelete={deleteList}
+            noun="watchlist"
+          />
           <p className="text-sm text-foreground/60">{stocks.length} stocks tracked</p>
         </div>
         <button

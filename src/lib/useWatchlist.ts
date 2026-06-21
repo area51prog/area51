@@ -86,6 +86,35 @@ export function useWatchlist() {
     return {};
   }
 
+  async function renameList(id: string, name: string): Promise<{ error?: string }> {
+    const previous = lists;
+    setLists((prev) => prev.map((l) => (l.id === id ? { ...l, name } : l)));
+    const { error } = await supabase.from("watchlists").update({ name }).eq("id", id);
+    if (error) {
+      setLists(previous);
+      return { error: error.message };
+    }
+    return {};
+  }
+
+  async function deleteList(id: string): Promise<{ error?: string }> {
+    if (lists.length <= 1) return { error: "You must keep at least one watchlist." };
+    const previous = lists;
+    const remaining = lists.filter((l) => l.id !== id);
+    setLists(remaining);
+    const { error } = await supabase.from("watchlists").delete().eq("id", id);
+    if (error) {
+      setLists(previous);
+      return {
+        error: error.message.includes("last_list_blocked")
+          ? "You must keep at least one watchlist."
+          : error.message,
+      };
+    }
+    if (id === activeListId) await switchList(remaining[0].id);
+    return {};
+  }
+
   async function add(symbol: string): Promise<{ error?: string }> {
     if (!user || !activeListId || symbols.includes(symbol)) return {};
     setSymbols((prev) => [...prev, symbol]);
@@ -115,5 +144,17 @@ export function useWatchlist() {
     else add(symbol);
   }
 
-  return { lists, activeListId, switchList, createList, symbols, ready, add, remove, toggle };
+  return {
+    lists,
+    activeListId,
+    switchList,
+    createList,
+    renameList,
+    deleteList,
+    symbols,
+    ready,
+    add,
+    remove,
+    toggle,
+  };
 }
