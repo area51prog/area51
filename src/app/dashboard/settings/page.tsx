@@ -4,7 +4,20 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Circle, XCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui";
+
+interface NotificationPrefs {
+  priceAlerts: boolean;
+  dividendReminders: boolean;
+  researchReady: boolean;
+}
+
+const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  priceAlerts: true,
+  dividendReminders: true,
+  researchReady: true,
+};
 
 interface ProvidersStatus {
   upstoxConfigured: boolean;
@@ -31,9 +44,13 @@ function SettingsPageInner() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [supabase] = useState(() => createClient());
   const [name, setName] = useState(user?.name ?? "");
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [providers, setProviders] = useState<ProvidersStatus | null>(null);
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>(DEFAULT_NOTIFICATION_PREFS);
   const upstoxMessage = UPSTOX_MESSAGES[searchParams.get("upstox") ?? ""];
 
   useEffect(() => {
@@ -43,13 +60,38 @@ function SettingsPageInner() {
       .catch(() => setProviders(null));
   }, []);
 
+  useEffect(() => {
+    setName(user?.name ?? "");
+  }, [user?.name]);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const prefs = data.user?.user_metadata?.notification_prefs as Partial<NotificationPrefs> | undefined;
+      if (prefs) setNotificationPrefs({ ...DEFAULT_NOTIFICATION_PREFS, ...prefs });
+    });
+  }, [supabase]);
+
+  async function handleNotificationPrefChange(key: keyof NotificationPrefs, value: boolean) {
+    const next = { ...notificationPrefs, [key]: value };
+    setNotificationPrefs(next);
+    await supabase.auth.updateUser({ data: { notification_prefs: next } });
+  }
+
   async function handleDisconnectUpstox() {
     await fetch("/api/upstox/disconnect", { method: "POST" });
     setProviders((prev) => (prev ? { ...prev, upstoxConnected: false } : prev));
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
+    setSaveError("");
+    const { error } = await supabase.auth.updateUser({ data: { full_name: name } });
+    setSaving(false);
+    if (error) {
+      setSaveError(error.message);
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -153,20 +195,34 @@ function SettingsPageInner() {
           <div className="flex items-center gap-3">
             <button
               type="submit"
-              className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90"
+              disabled={saving}
+              className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 disabled:opacity-60"
             >
-              Save changes
+              {saving ? "Saving…" : "Save changes"}
             </button>
             {saved && <span className="text-sm text-up">Saved.</span>}
+            {saveError && <span className="text-sm text-down">{saveError}</span>}
           </div>
         </form>
       </Card>
 
       <Card title="Notifications">
         <div className="space-y-3 text-sm">
-          <Toggle label="Price alerts for watchlist" defaultChecked />
-          <Toggle label="Upcoming dividend reminders" defaultChecked />
-          <Toggle label="New research report ready" defaultChecked />
+          <Toggle
+            label="Price alerts for watchlist"
+            checked={notificationPrefs.priceAlerts}
+            onChange={(value) => handleNotificationPrefChange("priceAlerts", value)}
+          />
+          <Toggle
+            label="Upcoming dividend reminders"
+            checked={notificationPrefs.dividendReminders}
+            onChange={(value) => handleNotificationPrefChange("dividendReminders", value)}
+          />
+          <Toggle
+            label="New research report ready"
+            checked={notificationPrefs.researchReady}
+            onChange={(value) => handleNotificationPrefChange("researchReady", value)}
+          />
         </div>
       </Card>
 
@@ -187,19 +243,26 @@ function SettingsPageInner() {
   );
 }
 
-function Toggle({ label, defaultChecked }: { label: string; defaultChecked?: boolean }) {
-  const [on, setOn] = useState(Boolean(defaultChecked));
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
   return (
     <label className="flex items-center justify-between cursor-pointer">
       <span className="text-foreground/70">{label}</span>
       <button
         type="button"
-        onClick={() => setOn((o) => !o)}
-        className={`w-10 h-6 rounded-full transition-colors relative ${on ? "bg-brand" : "bg-line"}`}
+        onClick={() => onChange(!checked)}
+        className={`w-10 h-6 rounded-full transition-colors relative ${checked ? "bg-brand" : "bg-line"}`}
       >
         <span
           className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-            on ? "translate-x-5" : "translate-x-0.5"
+            checked ? "translate-x-5" : "translate-x-0.5"
           }`}
         />
       </button>
