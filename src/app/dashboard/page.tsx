@@ -5,11 +5,12 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { usePortfolio } from "@/lib/usePortfolio";
 import { useWatchlist } from "@/lib/useWatchlist";
-import { getStock, getPortfolioHistory, PortfolioRange } from "@/lib/mock-data";
+import { getStock, getPortfolioHistory, PortfolioRange, RESEARCH_REPORTS } from "@/lib/mock-data";
 import { useQuotes } from "@/lib/useQuotes";
+import { useAllGeneratedReports } from "@/lib/useResearch";
 import { withLiveQuote } from "@/lib/liveStock";
 import { formatDate, formatINRCompact } from "@/lib/format";
-import { Card, ChangeBadge, LiveBadge, PriceAreaChart } from "@/components/ui";
+import { Card, ChangeBadge, LiveBadge, PriceAreaChart, RatingPill } from "@/components/ui";
 import { ArrowUpRight, Wallet, FileSearch } from "lucide-react";
 
 const PORTFOLIO_RANGES: PortfolioRange[] = ["1D", "1W", "1M", "1Y", "5Y"];
@@ -20,6 +21,7 @@ export default function OverviewPage() {
   const { holdings, ready: portfolioReady } = usePortfolio();
   const { symbols: watchlistSymbols, ready: watchlistReady } = useWatchlist();
   const { quotes, sources } = useQuotes(holdings.map((h) => h.symbol));
+  const generatedReports = useAllGeneratedReports();
 
   const rows = holdings
     .map((h) => {
@@ -41,6 +43,16 @@ export default function OverviewPage() {
   const dayChangePct = totalValue - totalDayChange ? (totalDayChange / (totalValue - totalDayChange)) * 100 : 0;
 
   const wealthHistory = getPortfolioHistory(totalValue, range);
+
+  const generatedOrder = Object.keys(generatedReports);
+  const recentResearch = Array.from(new Set([...RESEARCH_REPORTS.map((r) => r.symbol), ...generatedOrder]))
+    .map((symbol) => ({
+      symbol,
+      report: RESEARCH_REPORTS.find((r) => r.symbol === symbol) ?? generatedReports[symbol],
+      rank: generatedOrder.indexOf(symbol),
+    }))
+    .sort((a, b) => b.report.generatedOn.localeCompare(a.report.generatedOn) || b.rank - a.rank)
+    .slice(0, 5);
 
   const recentActivity = [...holdings]
     .sort((a, b) => b.buyDate.localeCompare(a.buyDate))
@@ -115,9 +127,31 @@ export default function OverviewPage() {
           <PriceAreaChart data={wealthHistory} />
         </Card>
         <Card title="Run equity research" className="flex flex-col">
-          <p className="text-sm text-foreground/60 flex-1">
+          <p className="text-sm text-foreground/60">
             Get an AI-generated equity research report — rating, target price, scenarios and risks — for any stock in seconds.
           </p>
+
+          {recentResearch.length > 0 && (
+            <div className="mt-3 flex-1 divide-y divide-line">
+              {recentResearch.map(({ symbol, report }) => (
+                <Link
+                  key={symbol}
+                  href={`/dashboard/research/${symbol}`}
+                  className="flex items-center justify-between py-2.5 hover:bg-background/60 rounded-lg px-2 -mx-2"
+                >
+                  <div>
+                    <div className="text-sm font-semibold text-heading">{symbol}</div>
+                    <div className="text-xs text-foreground/50">{formatDate(report.generatedOn)}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-heading">₹{report.targetPrice.toLocaleString("en-IN")}</span>
+                    <RatingPill rating={report.rating} />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+
           <Link
             href="/dashboard/research"
             className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-brand text-white text-sm font-semibold py-2.5 hover:bg-brand/90 transition-colors"
