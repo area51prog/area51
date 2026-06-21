@@ -75,7 +75,7 @@ function aggregatePositions(lots: Lot[]): Position[] {
 
 export function usePortfolio() {
   const { user } = useAuth();
-  const { isPremium } = useProfile();
+  const { isPremium, ready: profileReady } = useProfile();
   const [lists, setLists] = useState<PortfolioMeta[]>([]);
   const [activePortfolioId, setActivePortfolioId] = useState<string | null>(null);
   const [lots, setLots] = useState<Lot[]>([]);
@@ -92,6 +92,10 @@ export function usePortfolio() {
       setReady(false);
       return;
     }
+
+    // Wait for the profile tier to load — the default-selection logic below needs to
+    // know isPremium up front, otherwise it would always default to a single portfolio.
+    if (!profileReady) return;
 
     let cancelled = false;
 
@@ -139,8 +143,7 @@ export function usePortfolio() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- isPremium intentionally only used for the initial default-selection decision
-  }, [user, supabase]);
+  }, [user, supabase, profileReady, isPremium]);
 
   async function loadLots(portfolioIds: string[]) {
     if (portfolioIds.length === 0) {
