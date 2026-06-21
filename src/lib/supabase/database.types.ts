@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          default_signup_tier: string
+          id: boolean
+        }
+        Insert: {
+          default_signup_tier?: string
+          id?: boolean
+        }
+        Update: {
+          default_signup_tier?: string
+          id?: boolean
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           body: string | null
@@ -50,6 +65,7 @@ export type Database = {
           buy_date: string
           created_at: string
           id: string
+          portfolio_id: string
           quantity: number
           symbol: string
           user_id: string
@@ -59,6 +75,7 @@ export type Database = {
           buy_date?: string
           created_at?: string
           id?: string
+          portfolio_id: string
           quantity: number
           symbol: string
           user_id: string
@@ -68,9 +85,57 @@ export type Database = {
           buy_date?: string
           created_at?: string
           id?: string
+          portfolio_id?: string
           quantity?: number
           symbol?: string
           user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_holdings_portfolio_id_fkey"
+            columns: ["portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolios: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          tier: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          tier?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          tier?: string
         }
         Relationships: []
       }
@@ -80,17 +145,49 @@ export type Database = {
           id: string
           symbol: string
           user_id: string
+          watchlist_id: string
         }
         Insert: {
           created_at?: string
           id?: string
           symbol: string
           user_id: string
+          watchlist_id: string
         }
         Update: {
           created_at?: string
           id?: string
           symbol?: string
+          user_id?: string
+          watchlist_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "watchlist_watchlist_id_fkey"
+            columns: ["watchlist_id"]
+            isOneToOne: false
+            referencedRelation: "watchlists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      watchlists: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
           user_id?: string
         }
         Relationships: []
@@ -100,7 +197,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_limits: {
+        Args: { p_user_id: string }
+        Returns: Record<string, unknown>
+      }
     }
     Enums: {
       [_ in never]: never

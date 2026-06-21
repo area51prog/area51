@@ -2,8 +2,9 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, Circle, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, XCircle, Crown } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useProfile } from "@/lib/useProfile";
 import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui";
 
@@ -42,6 +43,7 @@ export default function SettingsPage() {
 
 function SettingsPageInner() {
   const { user, logout } = useAuth();
+  const { isPremium, ready: profileReady, maxLists, maxItemsPerList } = useProfile();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [supabase] = useState(() => createClient());
@@ -115,6 +117,36 @@ function SettingsPageInner() {
           {upstoxMessage.tone === "up" ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
           {upstoxMessage.text}
         </div>
+      )}
+
+      {profileReady && (
+        <Card>
+          <div className="flex items-center gap-4">
+            <span
+              className={`h-11 w-11 flex-none rounded-xl flex items-center justify-center ${
+                isPremium ? "bg-amber-400/15 text-amber-500" : "bg-background text-foreground/40"
+              }`}
+            >
+              <Crown size={20} />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-heading">{isPremium ? "Premium" : "Free"} plan</h3>
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                    isPremium ? "bg-amber-400/15 text-amber-500" : "bg-background text-foreground/40"
+                  }`}
+                >
+                  {isPremium ? "Premium" : "Free"}
+                </span>
+              </div>
+              <p className="text-sm text-foreground/60 mt-1">
+                Up to {maxLists} watchlist{maxLists === 1 ? "" : "s"} and portfolio{maxLists === 1 ? "" : "s"}, {maxItemsPerList} stocks each
+                {isPremium ? ". Research and Dividends are unlocked." : ". Upgrade to unlock Research and Dividends."}
+              </p>
+            </div>
+          </div>
+        </Card>
       )}
 
       <Card title="Market data providers">

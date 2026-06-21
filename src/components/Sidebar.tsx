@@ -10,19 +10,22 @@ import {
   CalendarClock,
   Settings,
   LifeBuoy,
+  Lock,
 } from "lucide-react";
 import clsx from "clsx";
+import { useProfile } from "@/lib/useProfile";
 
 const NAV = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/watchlist", label: "Watchlist", icon: Eye },
-  { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase },
-  { href: "/dashboard/research", label: "Research", icon: FileSearch },
-  { href: "/dashboard/dividends", label: "Dividends", icon: CalendarClock },
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard, premium: false },
+  { href: "/dashboard/watchlist", label: "Watchlist", icon: Eye, premium: false },
+  { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase, premium: false },
+  { href: "/dashboard/research", label: "Research", icon: FileSearch, premium: true },
+  { href: "/dashboard/dividends", label: "Dividends", icon: CalendarClock, premium: true },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { isPremium } = useProfile();
 
   return (
     <aside className="hidden md:flex w-60 flex-none flex-col border-r border-line bg-surface">
@@ -33,8 +36,9 @@ export default function Sidebar() {
         Bot17
       </div>
       <nav className="flex-1 px-3 py-2 space-y-0.5">
-        {NAV.map(({ href, label, icon: Icon }) => {
+        {NAV.map(({ href, label, icon: Icon, premium }) => {
           const active = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+          const locked = premium && !isPremium;
           return (
             <Link
               key={href}
@@ -47,7 +51,8 @@ export default function Sidebar() {
               )}
             >
               <Icon size={18} />
-              {label}
+              <span className="flex-1">{label}</span>
+              {locked && <Lock size={14} className="text-foreground/40" />}
             </Link>
           );
         })}

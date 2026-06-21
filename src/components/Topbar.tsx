@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
+import { useProfile } from "@/lib/useProfile";
 import { STOCKS } from "@/lib/mock-data";
 import { useNotifications, AppNotification } from "@/lib/useNotifications";
 import Link from "next/link";
@@ -42,6 +43,7 @@ function timeAgo(iso: string) {
 
 export default function Topbar({ title }: { title: string }) {
   const { user, logout } = useAuth();
+  const { isPremium, ready: profileReady } = useProfile();
   const { theme, toggle: toggleTheme } = useTheme();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const router = useRouter();
@@ -166,6 +168,15 @@ export default function Topbar({ title }: { title: string }) {
           <span className="hidden sm:block text-sm font-medium max-w-[120px] truncate">
             {user?.name ?? "User"}
           </span>
+          {profileReady && (
+            <span
+              className={`hidden sm:inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                isPremium ? "bg-amber-400/15 text-amber-500" : "bg-background text-foreground/40"
+              }`}
+            >
+              {isPremium ? "Premium" : "Free"}
+            </span>
+          )}
           <ChevronDown size={14} className="text-foreground/40" />
         </button>
         {menuOpen && (

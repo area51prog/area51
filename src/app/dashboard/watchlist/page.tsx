@@ -8,11 +8,13 @@ import { useWatchlist } from "@/lib/useWatchlist";
 import { useQuotes } from "@/lib/useQuotes";
 import { withLiveQuote } from "@/lib/liveStock";
 import { Card, ChangeBadge, LiveBadge } from "@/components/ui";
+import { ListSwitcher } from "@/components/ListSwitcher";
 
 export default function WatchlistPage() {
-  const { symbols, ready, remove, add } = useWatchlist();
+  const { lists, activeListId, switchList, createList, symbols, ready, remove, add } = useWatchlist();
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
+  const [addError, setAddError] = useState("");
 
   const baseStocks = symbols.map((s) => getStock(s)).filter((s): s is NonNullable<typeof s> => Boolean(s));
   const { quotes, sources } = useQuotes(baseStocks.map((s) => s.symbol));
@@ -27,8 +29,11 @@ export default function WatchlistPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-foreground/60">{stocks.length} stocks tracked</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <ListSwitcher lists={lists} activeId={activeListId} onSwitch={switchList} onCreate={createList} noun="watchlist" />
+          <p className="text-sm text-foreground/60">{stocks.length} stocks tracked</p>
+        </div>
         <button
           onClick={() => setAdding((a) => !a)}
           className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white text-sm font-semibold px-3.5 py-2 hover:bg-brand/90"
@@ -46,13 +51,21 @@ export default function WatchlistPage() {
             placeholder="Search stocks to add…"
             className="w-full rounded-lg border border-line bg-surface text-foreground px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand mb-3"
           />
+          {addError && <p className="text-sm text-down mb-2">{addError}</p>}
           <div className="max-h-64 overflow-y-auto scrollbar-thin divide-y divide-line">
             {candidates.length === 0 && <p className="text-sm text-foreground/50 py-3">No matches.</p>}
             {candidates.map((s) => (
               <button
                 key={s.symbol}
-                onClick={() => {
-                  add(s.symbol);
+                onClick={async () => {
+                  const { error } = await add(s.symbol);
+                  setAddError(
+                    error
+                      ? error.includes("item_limit_exceeded")
+                        ? "Your plan's stock limit for this watchlist has been reached. Upgrade to Premium for more."
+                        : error
+                      : ""
+                  );
                   setQuery("");
                 }}
                 className="w-full flex items-center justify-between py-2.5 text-left hover:bg-background/60 rounded-lg px-2 -mx-2"

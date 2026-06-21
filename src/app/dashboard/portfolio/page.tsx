@@ -10,11 +10,13 @@ import { useQuotes } from "@/lib/useQuotes";
 import { withLiveQuote } from "@/lib/liveStock";
 import { formatINR, formatINRCompact } from "@/lib/format";
 import { Card, ChangeBadge, LiveBadge } from "@/components/ui";
+import { ListSwitcher } from "@/components/ListSwitcher";
 
 const COLORS = ["#1a2348", "#4f46e5", "#7c83e8", "#a5abf2", "#c8ccf8", "#15803d"];
 
 export default function PortfolioPage() {
-  const { holdings, ready, addHolding, removeHolding } = usePortfolio();
+  const { lists, activePortfolioId, switchPortfolio, createPortfolio, holdings, ready, addHolding, removeHolding } =
+    usePortfolio();
   const { quotes, sources } = useQuotes(holdings.map((h) => h.symbol));
   const [adding, setAdding] = useState(false);
 
@@ -41,7 +43,14 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-3">
+        <ListSwitcher
+          lists={lists}
+          activeId={activePortfolioId}
+          onSwitch={switchPortfolio}
+          onCreate={createPortfolio}
+          noun="portfolio"
+        />
         <button
           type="button"
           onClick={() => setAdding((a) => !a)}
