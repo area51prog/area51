@@ -20,8 +20,8 @@ interface User {
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, captchaToken: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, captchaToken: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -60,16 +60,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.subscription.unsubscribe();
   }, [supabase]);
 
-  async function login(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+  async function login(email: string, password: string, captchaToken: string) {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken },
+    });
     if (error) throw new Error(error.message);
   }
 
-  async function signup(name: string, email: string, password: string) {
+  async function signup(name: string, email: string, password: string, captchaToken: string) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: name } },
+      options: { data: { full_name: name }, captchaToken },
     });
     if (error) throw new Error(error.message);
     if (!data.session) {

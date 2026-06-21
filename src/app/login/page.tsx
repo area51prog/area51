@@ -1,18 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { useAuth } from "@/lib/auth";
 import AuthShell from "@/components/AuthShell";
+import Captcha from "@/components/Captcha";
 
 export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const captchaRef = useRef<TurnstileInstance>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,14 +24,20 @@ export default function LoginPage() {
       setError("Enter both email and password.");
       return;
     }
+    if (!captchaToken) {
+      setError("Please complete the captcha.");
+      return;
+    }
     setError("");
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(email, password, captchaToken);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to log in.");
       setSubmitting(false);
+      captchaRef.current?.reset();
+      setCaptchaToken("");
     }
   }
 
@@ -54,6 +64,7 @@ export default function LoginPage() {
             className="w-full rounded-lg border border-line bg-surface text-foreground px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
           />
         </Field>
+        <Captcha ref={captchaRef} onVerify={setCaptchaToken} />
         {error && <p className="text-sm text-down">{error}</p>}
         <button
           type="submit"
