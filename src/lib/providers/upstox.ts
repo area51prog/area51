@@ -15,7 +15,7 @@ interface UpstoxInstrument {
 interface OhlcEntry {
   last_price: number;
   instrument_token: string;
-  prev_ohlc: { open: number; high: number; low: number; close: number };
+  prev_ohlc: { open: number; high: number; low: number; close: number } | null;
   live_ohlc: { open: number; high: number; low: number; close: number };
 }
 
@@ -82,7 +82,7 @@ export async function getUpstoxQuotes(symbols: string[]): Promise<Record<string,
     for (const entry of Object.values(body.data)) {
       const symbol = symbolByInstrumentKey.get(entry.instrument_token);
       if (!symbol) continue;
-      const prevClose = entry.prev_ohlc.close;
+      const prevClose = entry.prev_ohlc?.close ?? entry.live_ohlc.close;
       const price = entry.last_price;
       result[symbol] = {
         price,
