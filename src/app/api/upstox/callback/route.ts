@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { saveUpstoxToken } from "@/lib/upstoxToken";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(req: NextRequest) {
   const settingsUrl = new URL("/dashboard/settings", req.url);
@@ -40,7 +41,12 @@ export async function GET(req: NextRequest) {
       return Response.redirect(settingsUrl.toString());
     }
 
-    saveUpstoxToken(data.access_token);
+    const supabase = await createClient();
+    const saved = await saveUpstoxToken(supabase, data.access_token);
+    if (!saved) {
+      settingsUrl.searchParams.set("upstox", "error");
+      return Response.redirect(settingsUrl.toString());
+    }
     settingsUrl.searchParams.set("upstox", "connected");
     return Response.redirect(settingsUrl.toString());
   } catch {

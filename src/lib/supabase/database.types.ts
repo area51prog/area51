@@ -186,6 +186,27 @@ export type Database = {
           },
         ]
       }
+      upstox_tokens: {
+        Row: {
+          access_token: string
+          expires_at: string
+          obtained_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          expires_at: string
+          obtained_at: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          expires_at?: string
+          obtained_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       watchlist: {
         Row: {
           created_at: string

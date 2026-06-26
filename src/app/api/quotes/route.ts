@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getUpstoxQuotes } from "@/lib/providers/upstox";
 import { getFinnhubQuotes } from "@/lib/providers/finnhub";
+import { createClient } from "@/lib/supabase/server";
 import { LiveQuote, QuoteSource } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
@@ -19,7 +20,8 @@ export async function GET(req: NextRequest) {
   // Provider order: Upstox (NSE-native) first, then Finnhub for anything Upstox
   // didn't cover. Symbols neither provider has data for stay unset — the
   // client falls back to mock data for those.
-  const upstoxQuotes = await getUpstoxQuotes(symbols);
+  const supabase = await createClient();
+  const upstoxQuotes = await getUpstoxQuotes(supabase, symbols);
   for (const symbol of Object.keys(upstoxQuotes)) {
     quotes[symbol] = upstoxQuotes[symbol];
     sources[symbol] = "upstox";

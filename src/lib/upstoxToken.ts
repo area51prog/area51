@@ -1,7 +1,6 @@
-import fs from "fs";
-import path from "path";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { Database } from "@/lib/supabase/database.types";
 
-const TOKEN_PATH = path.join(process.cwd(), ".data", "upstox-token.json");
 const IST_OFFSET_MIN = 330;
 
 interface StoredToken {
@@ -9,6 +8,8 @@ interface StoredToken {
   obtainedAt: number;
   expiresAt: number;
 }
+
+type Client = SupabaseClient<Database>;
 
 // Upstox access tokens always expire at 3:30 AM IST the day after they were
 // issued, regardless of issue time.
@@ -19,33 +20,54 @@ function computeExpiry(obtainedAtMs: number) {
   return expiryIstMs - IST_OFFSET_MIN * 60_000;
 }
 
-export function saveUpstoxToken(accessToken: string): StoredToken {
+export async function saveUpstoxToken(supabase: Client, accessToken: string): Promise<StoredToken | null> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return null;
+
   const obtainedAt = Date.now();
   const token: StoredToken = { accessToken, obtainedAt, expiresAt: computeExpiry(obtainedAt) };
-  fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify(token), "utf-8");
+
+  await supabase.from("upstox_tokens").upsert({
+    user_id: userId,
+    access_token: token.accessToken,
+    obtained_at: new Date(token.obtainedAt).toISOString(),
+    expires_at: new Date(token.expiresAt).toISOString(),
+  });
+
   return token;
 }
 
-export function readUpstoxToken(): StoredToken | null {
-  try {
-    const raw = fs.readFileSync(TOKEN_PATH, "utf-8");
-    return JSON.parse(raw) as StoredToken;
-  } catch {
-    return null;
-  }
+export async function readUpstoxToken(supabase: Client): Promise<StoredToken | null> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return null;
+
+  const { data } = await supabase
+    .from("upstox_tokens")
+    .select("access_token, obtained_at, expires_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  return {
+    accessToken: data.access_token,
+    obtainedAt: new Date(data.obtained_at).getTime(),
+    expiresAt: new Date(data.expires_at).getTime(),
+  };
 }
 
-export function getValidUpstoxAccessToken(): string | null {
-  const token = readUpstoxToken();
+export async function getValidUpstoxAccessToken(supabase: Client): Promise<string | null> {
+  const token = await readUpstoxToken(supabase);
   if (!token || Date.now() >= token.expiresAt) return null;
   return token.accessToken;
 }
 
-export function clearUpstoxToken() {
-  try {
-    fs.unlinkSync(TOKEN_PATH);
-  } catch {
-    // already absent
-  }
+export async function clearUpstoxToken(supabase: Client): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return;
+
+  await supabase.from("upstox_tokens").delete().eq("user_id", userId);
 }

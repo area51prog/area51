@@ -1,5 +1,7 @@
 import zlib from "zlib";
+import { SupabaseClient } from "@supabase/supabase-js";
 import { getValidUpstoxAccessToken } from "@/lib/upstoxToken";
+import { Database } from "@/lib/supabase/database.types";
 import { LiveQuote } from "@/lib/types";
 
 const INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz";
@@ -44,8 +46,11 @@ async function loadInstrumentMap(): Promise<Map<string, string>> {
   return map;
 }
 
-export async function getUpstoxQuotes(symbols: string[]): Promise<Record<string, LiveQuote>> {
-  const accessToken = getValidUpstoxAccessToken();
+export async function getUpstoxQuotes(
+  supabase: SupabaseClient<Database>,
+  symbols: string[]
+): Promise<Record<string, LiveQuote>> {
+  const accessToken = await getValidUpstoxAccessToken(supabase);
   if (!accessToken || symbols.length === 0) return {};
 
   let instrumentMap: Map<string, string>;
