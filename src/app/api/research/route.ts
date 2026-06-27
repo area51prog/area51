@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { resolveStock } from "@/lib/resolveStock";
 import { Stock, ResearchReport } from "@/lib/types";
 
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 const REPORT_SCHEMA = {
   type: "object" as const,
@@ -58,7 +59,7 @@ const REPORT_SCHEMA = {
 
 type GeneratedReport = Omit<ResearchReport, "symbol" | "generatedOn" | "currentPrice">;
 
-function buildPrompt(stock: Stock): string {
+function buildPrompt(stock: Stock, extraContext: string | null): string {
   const historyLine = stock.history.map((h) => `${h.date}: ₹${h.price}`).join(", ");
   return `You are an equity research analyst. Produce a 12-month equity research view for the following stock using the real data provided. Be specific and numerically grounded — do not invent data points that contradict what's given.
 
@@ -73,12 +74,12 @@ Day range: ₹${stock.dayLow} – ₹${stock.dayHigh}
 Market cap: ₹${stock.marketCapCr} cr
 P/E ratio: ${stock.peRatio ?? "n/a"}
 12-month price history: ${historyLine}
-
+${extraContext ? `\n${extraContext}\n` : ""}
 Call the submit_research_report tool with your full analysis.`;
 }
 
 function isStale(generatedAt: string): boolean {
-  return Date.now() - new Date(generatedAt).getTime() > SEVEN_DAYS_MS;
+  return Date.now() - new Date(generatedAt).getTime() > THIRTY_DAYS_MS;
 }
 
 export async function GET(req: NextRequest) {
@@ -116,14 +117,14 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false, error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
   }
 
-  let stock: Stock;
+  let symbol: string;
   let force = false;
   try {
     const body = await req.json();
-    stock = body.stock;
+    symbol = body.symbol;
     force = Boolean(body.force);
-    if (!stock || typeof stock.symbol !== "string") {
-      return Response.json({ ok: false, error: "Missing stock in request body" }, { status: 400 });
+    if (!symbol || typeof symbol !== "string") {
+      return Response.json({ ok: false, error: "Missing symbol in request body" }, { status: 400 });
     }
   } catch {
     return Response.json({ ok: false, error: "Invalid request body" }, { status: 400 });
@@ -136,7 +137,7 @@ export async function POST(req: NextRequest) {
     const { data: cached } = await supabase
       .from("research_reports")
       .select("report, generated_at")
-      .eq("symbol", stock.symbol)
+      .eq("symbol", symbol)
       .maybeSingle();
 
     if (cached && !isStale(cached.generated_at)) {
@@ -148,6 +149,12 @@ export async function POST(req: NextRequest) {
       });
     }
   }
+
+  const resolved = await resolveStock(supabase, symbol);
+  if (!resolved) {
+    return Response.json({ ok: false, error: "No market data available for this symbol" }, { status: 404 });
+  }
+  const { stock, extraContext } = resolved;
 
   const client = new Anthropic({ apiKey });
 
@@ -163,7 +170,7 @@ export async function POST(req: NextRequest) {
         },
       ],
       tool_choice: { type: "tool", name: "submit_research_report" },
-      messages: [{ role: "user", content: buildPrompt(stock) }],
+      messages: [{ role: "user", content: buildPrompt(stock, extraContext) }],
     });
 
     const toolUse = message.content.find((block) => block.type === "tool_use");

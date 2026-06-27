@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getResearch, getStock } from "./mock-data";
+import { getResearch } from "./mock-data";
 import { ResearchReport } from "./types";
 import { createClient } from "./supabase/client";
 
@@ -57,13 +57,10 @@ export function useResearch(symbol: string) {
       setGenerating(true);
       setError(null);
       try {
-        const stock = getStock(symbol);
-        if (!stock) throw new Error("No market data available for this symbol");
-
         const res = await fetch("/api/research", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stock, force }),
+          body: JSON.stringify({ symbol, force }),
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {

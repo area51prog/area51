@@ -2,18 +2,18 @@
 
 import { useParams, notFound } from "next/navigation";
 import { Download, Sparkles, Loader2, RefreshCw } from "lucide-react";
-import { getStock } from "@/lib/mock-data";
 import { useResearch } from "@/lib/useResearch";
+import { useStockSummary } from "@/lib/useStockSummary";
 import { Card, PriceAreaChart, RatingPill } from "@/components/ui";
 
 export default function ResearchDetailPage() {
   const params = useParams<{ symbol: string }>();
   const symbol = params.symbol;
-  const stock = getStock(symbol);
+  const stock = useStockSummary(symbol);
   const { report, generatedAt, stale, generating, ready, error, generate } = useResearch(symbol);
 
-  if (!stock) return notFound();
-  if (!ready) return null;
+  if (stock === null) return notFound();
+  if (stock === undefined || !ready) return null;
 
   if (!report) {
     return (
@@ -56,7 +56,7 @@ export default function ResearchDetailPage() {
       {stale && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm print:hidden">
           <span className="text-amber-800">
-            This report is more than 7 days old{generatedAt ? ` (generated ${generatedAt.slice(0, 10)})` : ""}.
+            This report is more than 30 days old{generatedAt ? ` (generated ${generatedAt.slice(0, 10)})` : ""}.
           </span>
           <button
             onClick={() => generate(true)}
@@ -112,7 +112,9 @@ export default function ResearchDetailPage() {
         </Card>
         <Card>
           <div className="text-xs font-semibold text-foreground/50 uppercase">Market cap</div>
-          <div className="text-xl font-bold text-heading mt-1">₹{stock.marketCapCr.toLocaleString("en-IN")} cr</div>
+          <div className="text-xl font-bold text-heading mt-1">
+            {stock.marketCapCr != null ? `₹${stock.marketCapCr.toLocaleString("en-IN")} cr` : "—"}
+          </div>
         </Card>
       </div>
 
