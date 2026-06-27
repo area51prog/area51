@@ -1,60 +1,105 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { generateMockReport, getResearch } from "./mock-data";
+import { useCallback, useEffect, useState } from "react";
+import { getResearch, getStock } from "./mock-data";
 import { ResearchReport } from "./types";
-
-const KEY = "area51_research_reports";
-
-function load(): Record<string, ResearchReport> {
-  if (typeof window === "undefined") return {};
-  const raw = localStorage.getItem(KEY);
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
+import { createClient } from "./supabase/client";
 
 export function useResearch(symbol: string) {
   const [report, setReport] = useState<ResearchReport | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect -- hydrating from seed/localStorage on mount */
-    const seeded = getResearch(symbol);
-    if (seeded) {
-      setReport(seeded);
-    } else {
-      const stored = load()[symbol];
-      if (stored) setReport(stored);
-    }
-    setReady(true);
-    /* eslint-enable react-hooks/set-state-in-effect */
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/research?symbol=${encodeURIComponent(symbol)}`);
+        const data = await res.json();
+        if (cancelled) return;
+
+        if (res.ok && data.ok && data.report) {
+          setReport(data.report);
+          setGeneratedAt(data.generatedAt);
+          setStale(data.stale);
+        } else {
+          const seeded = getResearch(symbol);
+          if (seeded) {
+            setReport(seeded);
+            setGeneratedAt(seeded.generatedOn);
+            setStale(false);
+          }
+        }
+      } catch {
+        if (cancelled) return;
+        const seeded = getResearch(symbol);
+        if (seeded) {
+          setReport(seeded);
+          setGeneratedAt(seeded.generatedOn);
+          setStale(false);
+        }
+      } finally {
+        if (!cancelled) setReady(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [symbol]);
 
-  function generate() {
-    setGenerating(true);
-    setTimeout(() => {
-      const r = generateMockReport(symbol);
-      const all = load();
-      all[symbol] = r;
-      localStorage.setItem(KEY, JSON.stringify(all));
-      setReport(r);
-      setGenerating(false);
-    }, 1400);
-  }
+  const generate = useCallback(
+    async (force = false) => {
+      setGenerating(true);
+      setError(null);
+      try {
+        const stock = getStock(symbol);
+        if (!stock) throw new Error("No market data available for this symbol");
 
-  return { report, generating, ready, generate };
+        const res = await fetch("/api/research", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stock, force }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || "Failed to generate research report");
+        }
+
+        setReport(data.report);
+        setGeneratedAt(data.generatedAt);
+        setStale(data.stale);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to generate research report");
+      } finally {
+        setGenerating(false);
+      }
+    },
+    [symbol]
+  );
+
+  return { report, generatedAt, stale, generating, ready, error, generate };
 }
 
 export function useAllGeneratedReports() {
   const [reports, setReports] = useState<Record<string, ResearchReport>>({});
+
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
-    setReports(load());
+    const supabase = createClient();
+    supabase
+      .from("research_reports")
+      .select("symbol, report")
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, ResearchReport> = {};
+        for (const row of data) map[row.symbol] = row.report as unknown as ResearchReport;
+        setReports(map);
+      });
   }, []);
+
   return reports;
 }

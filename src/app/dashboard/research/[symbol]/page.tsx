@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, notFound } from "next/navigation";
-import { Download, Sparkles, Loader2 } from "lucide-react";
+import { Download, Sparkles, Loader2, RefreshCw } from "lucide-react";
 import { getStock } from "@/lib/mock-data";
 import { useResearch } from "@/lib/useResearch";
 import { Card, PriceAreaChart, RatingPill } from "@/components/ui";
@@ -10,7 +10,7 @@ export default function ResearchDetailPage() {
   const params = useParams<{ symbol: string }>();
   const symbol = params.symbol;
   const stock = getStock(symbol);
-  const { report, generating, ready, generate } = useResearch(symbol);
+  const { report, generatedAt, stale, generating, ready, error, generate } = useResearch(symbol);
 
   if (!stock) return notFound();
   if (!ready) return null;
@@ -26,7 +26,7 @@ export default function ResearchDetailPage() {
           Generate an AI equity research report — rating, 12-month target, bull/base/bear scenarios, catalysts and risks for {stock.name}.
         </p>
         <button
-          onClick={generate}
+          onClick={() => generate(false)}
           disabled={generating}
           className="inline-flex items-center gap-2 rounded-lg bg-brand text-white text-sm font-semibold px-5 py-2.5 hover:bg-brand/90 disabled:opacity-70"
         >
@@ -34,18 +34,48 @@ export default function ResearchDetailPage() {
             <>
               <Loader2 size={16} className="animate-spin" /> Generating research…
             </>
+          ) : error ? (
+            <>
+              <Sparkles size={16} /> Try again
+            </>
           ) : (
             <>
               <Sparkles size={16} /> Generate equity research
             </>
           )}
         </button>
+        {error && (
+          <p className="text-sm text-down mt-3">{error}</p>
+        )}
       </div>
     );
   }
 
   return (
     <div className="space-y-5" id="research-report">
+      {stale && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm print:hidden">
+          <span className="text-amber-800">
+            This report is more than 7 days old{generatedAt ? ` (generated ${generatedAt.slice(0, 10)})` : ""}.
+          </span>
+          <button
+            onClick={() => generate(true)}
+            disabled={generating}
+            className="inline-flex items-center gap-1.5 rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+          >
+            {generating ? (
+              <>
+                <Loader2 size={14} className="animate-spin" /> Refreshing…
+              </>
+            ) : (
+              <>
+                <RefreshCw size={14} /> Refresh research
+              </>
+            )}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-sm text-down">{error}</p>}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
