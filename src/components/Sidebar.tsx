@@ -12,6 +12,7 @@ import {
   Settings,
   LifeBuoy,
   Lock,
+  Shield,
 } from "lucide-react";
 import clsx from "clsx";
 import { useProfile } from "@/lib/useProfile";
@@ -27,7 +28,7 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { isPremium } = useProfile();
+  const { isPremium, isAdmin } = useProfile();
 
   return (
     <aside className="hidden md:flex w-60 flex-none flex-col border-r border-line bg-surface">
@@ -60,6 +61,20 @@ export default function Sidebar() {
         })}
       </nav>
       <div className="px-3 pb-4 space-y-0.5">
+        {isAdmin && (
+          <Link
+            href="/dashboard/admin"
+            className={clsx(
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+              pathname.startsWith("/dashboard/admin")
+                ? "bg-brand-light text-brand"
+                : "text-foreground/60 hover:bg-background hover:text-foreground"
+            )}
+          >
+            <Shield size={18} />
+            Admin Console
+          </Link>
+        )}
         <Link
           href="/dashboard/settings"
           className={clsx(

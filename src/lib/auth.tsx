@@ -63,12 +63,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase]);
 
   async function login(email: string, password: string, captchaToken: string) {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
       options: { captchaToken },
     });
     if (error) throw new Error(error.message);
+
+    if (data.user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("status")
+        .eq("id", data.user.id)
+        .single();
+      if (profile?.status === "suspended") {
+        await supabase.auth.signOut();
+        throw new Error("Your account has been suspended. Contact support for help.");
+      }
+    }
   }
 
   async function signup(name: string, email: string, password: string, captchaToken: string) {

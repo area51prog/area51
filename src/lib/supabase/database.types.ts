@@ -143,16 +143,22 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          role: string
+          status: string
           tier: string
         }
         Insert: {
           created_at?: string
           id: string
+          role?: string
+          status?: string
           tier?: string
         }
         Update: {
           created_at?: string
           id?: string
+          role?: string
+          status?: string
           tier?: string
         }
         Relationships: []
@@ -307,6 +313,10 @@ export type Database = {
       get_user_limits: {
         Args: { p_user_id: string }
         Returns: Record<string, unknown>
+      }
+      is_admin: {
+        Args: { uid: string }
+        Returns: boolean
       }
     }
     Enums: {
