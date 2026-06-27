@@ -17,6 +17,7 @@ export default function ResearchDetailPage() {
   const [range, setRange] = useState<TrendRange>("1Y");
   const [chartMode, setChartMode] = useState<ChartMode>("price");
   const [livePeHistory, setLivePeHistory] = useState<{ date: string; value: number }[] | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const stock = useStockSummary(symbol, range);
   const { report, generatedAt, stale, generating, ready, error, generate } = useResearch(symbol);
 
@@ -77,6 +78,25 @@ export default function ResearchDetailPage() {
     );
   }
 
+  async function downloadPdf() {
+    setDownloading(true);
+    try {
+      const [{ pdf }, { ResearchReportPdf }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/ResearchReportPdf"),
+      ]);
+      const blob = await pdf(<ResearchReportPdf stock={stock!} report={report!} />).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${stock!.symbol}-equity-research-${report!.generatedOn}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="space-y-5" id="research-report">
       {stale && (
@@ -113,10 +133,19 @@ export default function ResearchDetailPage() {
           <p className="text-sm text-foreground/60">Equity research · Generated {report.generatedOn}</p>
         </div>
         <button
-          onClick={() => window.print()}
-          className="inline-flex items-center gap-2 rounded-lg border border-line px-3.5 py-2 text-sm font-semibold hover:bg-background print:hidden"
+          onClick={downloadPdf}
+          disabled={downloading}
+          className="inline-flex items-center gap-2 rounded-lg border border-line px-3.5 py-2 text-sm font-semibold hover:bg-background disabled:opacity-60"
         >
-          <Download size={15} /> Download PDF
+          {downloading ? (
+            <>
+              <Loader2 size={15} className="animate-spin" /> Preparing PDF…
+            </>
+          ) : (
+            <>
+              <Download size={15} /> Download PDF
+            </>
+          )}
         </button>
       </div>
 
