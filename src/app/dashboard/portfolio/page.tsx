@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, Trash2, Pencil, Upload } from "lucide-react";
+import { Plus, Trash2, Pencil, Upload, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getStock } from "@/lib/mock-data";
 import { usePortfolio, SUMMARY_ID, Position, NewHolding } from "@/lib/usePortfolio";
@@ -22,6 +22,18 @@ interface SymbolResult {
   name: string;
   exchange: Exchange;
 }
+
+type SortKey = "symbol" | "quantity" | "avgPrice" | "ltp" | "dayChange" | "value" | "gain";
+
+const SORT_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "symbol", label: "Stock" },
+  { key: "quantity", label: "Qty" },
+  { key: "avgPrice", label: "Avg. cost" },
+  { key: "ltp", label: "LTP" },
+  { key: "dayChange", label: "Day change" },
+  { key: "value", label: "Current value" },
+  { key: "gain", label: "P&L" },
+];
 
 export default function PortfolioPage() {
   const {
@@ -46,6 +58,8 @@ export default function PortfolioPage() {
   const [editingSymbol, setEditingSymbol] = useState<string | null>(null);
   const [info, setInfo] = useState<Record<string, SymbolResult>>({});
   const fetchedInfoRef = useRef<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<SortKey>("value");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   // Close any open Add / Buy-Sell form when the selected portfolio changes (incl. switching
   // to/from Summary) — those forms act on a specific portfolio and shouldn't linger.
@@ -123,14 +137,63 @@ export default function PortfolioPage() {
     return { p, s, priceKnown, invested, value, gain, gainPct, dayChangePct, dayPnl };
   });
 
+  const sortedRows = [...rows].sort((a, b) => {
+    let diff = 0;
+    switch (sortKey) {
+      case "symbol":
+        diff = a.p.symbol.localeCompare(b.p.symbol);
+        break;
+      case "quantity":
+        diff = a.p.quantity - b.p.quantity;
+        break;
+      case "avgPrice":
+        diff = a.p.avgPrice - b.p.avgPrice;
+        break;
+      case "ltp":
+        diff = (a.priceKnown ? a.s!.price : -1) - (b.priceKnown ? b.s!.price : -1);
+        break;
+      case "dayChange":
+        diff = a.dayChangePct - b.dayChangePct;
+        break;
+      case "value":
+        diff = a.value - b.value;
+        break;
+      case "gain":
+        diff = a.gain - b.gain;
+        break;
+    }
+    return sortDir === "asc" ? diff : -diff;
+  });
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  }
+
   const totalValue = rows.reduce((sum, r) => sum + r.value, 0);
   const totalInvested = rows.reduce((sum, r) => sum + r.invested, 0);
   const totalGain = totalValue - totalInvested;
   const totalDayPnl = rows.reduce((sum, r) => sum + r.dayPnl, 0);
 
-  const pieData = rows
+  const allocationRaw = rows
     .map((r) => ({ name: r.p.symbol, value: r.value }))
     .sort((a, b) => b.value - a.value);
+  const { major, others } = allocationRaw.reduce<{ major: typeof allocationRaw; others: typeof allocationRaw }>(
+    (acc, d) => {
+      const pct = totalValue ? (d.value / totalValue) * 100 : 0;
+      (pct < 5 ? acc.others : acc.major).push(d);
+      return acc;
+    },
+    { major: [], others: [] }
+  );
+  const pieData =
+    others.length > 1
+      ? [...major, { name: "Others", value: others.reduce((sum, d) => sum + d.value, 0) }]
+      : allocationRaw;
 
   const switcherLists =
     isPremium && lists.length > 1 ? [{ id: SUMMARY_ID, name: "All Portfolios" }, ...lists] : lists;
@@ -246,18 +309,31 @@ export default function PortfolioPage() {
               <table className="w-full text-sm min-w-[800px]">
                 <thead>
                   <tr className="text-left text-xs text-foreground/40 uppercase tracking-wide border-b border-line">
-                    <th className="py-2 font-semibold">Stock</th>
-                    <th className="py-2 font-semibold text-right">Qty</th>
-                    <th className="py-2 font-semibold text-right">Avg. cost</th>
-                    <th className="py-2 font-semibold text-right">LTP</th>
-                    <th className="py-2 font-semibold text-right">Day change</th>
-                    <th className="py-2 font-semibold text-right">Current value</th>
-                    <th className="py-2 font-semibold text-right">P&amp;L</th>
+                    {SORT_COLUMNS.map((col, i) => (
+                      <th key={col.key} className={`py-2 font-semibold ${i === 0 ? "" : "text-right"}`}>
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(col.key)}
+                          className={`inline-flex items-center gap-1 hover:text-foreground/70 ${i === 0 ? "" : "flex-row-reverse"}`}
+                        >
+                          {col.label}
+                          {sortKey === col.key ? (
+                            sortDir === "asc" ? (
+                              <ArrowUp size={12} />
+                            ) : (
+                              <ArrowDown size={12} />
+                            )
+                          ) : (
+                            <ArrowUpDown size={12} className="opacity-40" />
+                          )}
+                        </button>
+                      </th>
+                    ))}
                     {!isSummary && <th className="py-2 font-semibold text-right"></th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {rows.map((r) => (
+                  {sortedRows.map((r) => (
                     <tr key={r.p.symbol} className="group">
                       <td className="py-3">
                         <Link href={`/dashboard/stocks/${r.p.symbol}`} className="font-semibold text-heading hover:text-brand">
