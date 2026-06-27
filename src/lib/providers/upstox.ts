@@ -334,7 +334,7 @@ export async function getUpstoxFundamentals(
     })
     .filter((s): s is ShareholdingSlice => s !== null);
 
-  const corporateActions: CorporateAction[] = (corporateActionsData ?? []).slice(0, 5).map((a) => ({
+  const corporateActions: CorporateAction[] = (corporateActionsData ?? []).slice(0, 20).map((a) => ({
     name: a.name ?? "",
     exDate: a.expiry_date ?? null,
     amount: a.amount ?? null,

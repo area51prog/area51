@@ -1,22 +1,24 @@
 "use client";
 
 import { CalendarClock, IndianRupee } from "lucide-react";
-import { DIVIDENDS, getStock } from "@/lib/mock-data";
 import { usePortfolio } from "@/lib/usePortfolio";
+import { useDividends } from "@/lib/useDividends";
 import { formatDate, formatINR } from "@/lib/format";
 import { Card } from "@/components/ui";
 
-const TODAY = new Date("2026-06-20");
+const TODAY = new Date();
 
 export default function DividendsPage() {
-  const { positions, ready } = usePortfolio();
-  const held = new Set(positions.map((p) => p.symbol));
-  const events = DIVIDENDS.filter((d) => held.has(d.symbol)).flatMap((d) => {
+  const { positions, ready: portfolioReady } = usePortfolio();
+  const symbols = positions.map((p) => p.symbol);
+  const { events: dividendEvents, ready: dividendsReady } = useDividends(symbols);
+  const ready = portfolioReady && dividendsReady;
+
+  const events = dividendEvents.flatMap((d) => {
     const holding = positions.find((p) => p.symbol === d.symbol);
-    const stock = getStock(d.symbol);
-    if (!holding || !stock) return [];
+    if (!holding) return [];
     const total = d.amountPerShare * holding.quantity;
-    return [{ ...d, stock, holding, total }];
+    return [{ ...d, holding, total }];
   });
 
   const upcoming = events.filter((e) => new Date(e.exDate) >= TODAY).sort((a, b) => a.exDate.localeCompare(b.exDate));
@@ -61,7 +63,7 @@ export default function DividendsPage() {
           </div>
           {nextEvent ? (
             <>
-              <div className="text-2xl font-bold text-heading mt-2">{nextEvent.stock.symbol}</div>
+              <div className="text-2xl font-bold text-heading mt-2">{nextEvent.symbol}</div>
               <div className="text-xs text-foreground/50 mt-1">
                 Ex-date {formatDate(nextEvent.exDate)} · ₹{nextEvent.amountPerShare}/share
               </div>
@@ -95,7 +97,7 @@ export default function DividendsPage() {
                     <div key={i} className="flex items-center justify-between py-3">
                       <div>
                         <div className="text-sm font-semibold text-heading">
-                          {e.stock.symbol} <span className="text-xs font-normal text-foreground/50">· {e.type}</span>
+                          {e.symbol} <span className="text-xs font-normal text-foreground/50">· {e.type}</span>
                         </div>
                         <div className="text-xs text-foreground/50">
                           Ex-date {formatDate(e.exDate)} · Pays {formatDate(e.paymentDate)}
@@ -133,7 +135,7 @@ export default function DividendsPage() {
               <tbody className="divide-y divide-line">
                 {past.map((e, i) => (
                   <tr key={i}>
-                    <td className="py-2.5 font-semibold text-heading">{e.stock.symbol}</td>
+                    <td className="py-2.5 font-semibold text-heading">{e.symbol}</td>
                     <td className="py-2.5 text-foreground/60">{e.type}</td>
                     <td className="py-2.5 text-right">{formatDate(e.exDate)}</td>
                     <td className="py-2.5 text-right">₹{e.amountPerShare}</td>

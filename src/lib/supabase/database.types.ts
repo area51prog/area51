@@ -29,6 +29,24 @@ export type Database = {
         }
         Relationships: []
       }
+      dividend_cache: {
+        Row: {
+          events: Json
+          fetched_at: string
+          symbol: string
+        }
+        Insert: {
+          events: Json
+          fetched_at?: string
+          symbol: string
+        }
+        Update: {
+          events?: Json
+          fetched_at?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           body: string | null
@@ -136,6 +154,27 @@ export type Database = {
           created_at?: string
           id?: string
           tier?: string
+        }
+        Relationships: []
+      }
+      research_reports: {
+        Row: {
+          generated_at: string
+          generated_by: string | null
+          report: Json
+          symbol: string
+        }
+        Insert: {
+          generated_at?: string
+          generated_by?: string | null
+          report: Json
+          symbol: string
+        }
+        Update: {
+          generated_at?: string
+          generated_by?: string | null
+          report?: Json
+          symbol?: string
         }
         Relationships: []
       }
