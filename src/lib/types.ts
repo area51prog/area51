@@ -69,6 +69,7 @@ export interface KeyRatio {
   name: string;
   companyValue: string;
   sectorValue: string;
+  history?: { period: string; value: number }[];
 }
 
 export interface ShareholdingSlice {

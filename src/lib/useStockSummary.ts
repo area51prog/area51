@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { getStock } from "./mock-data";
 import { Exchange } from "./types";
 
+export type TrendRange = "1D" | "1W" | "1M" | "1Y" | "5Y";
+
 export interface StockSummary {
   symbol: string;
   name: string;
@@ -12,7 +14,7 @@ export interface StockSummary {
   history: { date: string; price: number }[];
 }
 
-export function useStockSummary(symbol: string) {
+export function useStockSummary(symbol: string, range: TrendRange = "1Y") {
   const [summary, setSummary] = useState<StockSummary | null | undefined>(undefined);
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export function useStockSummary(symbol: string) {
       try {
         const [lookupRes, historyRes] = await Promise.all([
           fetch(`/api/symbols/lookup?symbol=${encodeURIComponent(symbol)}`),
-          fetch(`/api/stocks/${encodeURIComponent(symbol)}/history?range=1Y`),
+          fetch(`/api/stocks/${encodeURIComponent(symbol)}/history?range=${range}`),
         ]);
         const lookupBody = await lookupRes.json();
         const historyBody = await historyRes.json();
@@ -63,7 +65,7 @@ export function useStockSummary(symbol: string) {
     return () => {
       cancelled = true;
     };
-  }, [symbol]);
+  }, [symbol, range]);
 
   return summary;
 }

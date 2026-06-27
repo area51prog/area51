@@ -9,7 +9,8 @@ import { getStock } from "@/lib/mock-data";
 import { useWatchlist } from "@/lib/useWatchlist";
 import { usePortfolio } from "@/lib/usePortfolio";
 import { formatINR, formatINRCompact } from "@/lib/format";
-import { Card, ChangeBadge, PriceAreaChart } from "@/components/ui";
+import { derivePeHistory } from "@/lib/peHistory";
+import { Card, ChangeBadge, ChartModeToggle, PriceAreaChart, RangeSelector, ChartMode } from "@/components/ui";
 import {
   Exchange,
   FullQuote,
@@ -45,6 +46,8 @@ export default function StockDetailPage() {
 
   const [tab, setTab] = useState<Tab>("overview");
   const [trendRange, setTrendRange] = useState<TrendRange>("1Y");
+  const [chartMode, setChartMode] = useState<ChartMode>("price");
+  const [livePeHistory, setLivePeHistory] = useState<{ date: string; value: number }[] | null>(null);
 
   const [instrument, setInstrument] = useState<InstrumentInfo | null | undefined>(undefined);
   const [apiConnected, setApiConnected] = useState(true);
@@ -133,6 +136,22 @@ export default function StockDetailPage() {
       cancelled = true;
     };
   }, [symbol, trendRange]);
+
+  useEffect(() => {
+    if (mockStock) return;
+    let cancelled = false;
+    fetch(`/api/stocks/${encodeURIComponent(symbol)}/pe-history`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (!cancelled) setLivePeHistory(body.ok ? body.peHistory : null);
+      })
+      .catch(() => {
+        if (!cancelled) setLivePeHistory(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, mockStock]);
 
   useEffect(() => {
     let cancelled = false;
@@ -237,6 +256,9 @@ export default function StockDetailPage() {
           onRangeChange={setTrendRange}
           candles={trendCandles}
           up={pct >= 0}
+          chartMode={chartMode}
+          onChartModeChange={setChartMode}
+          peData={mockStock ? derivePeHistory(mockStock) : livePeHistory}
         />
       )}
 
@@ -341,46 +363,49 @@ function TrendsTab({
   onRangeChange,
   candles,
   up,
+  chartMode,
+  onChartModeChange,
+  peData,
 }: {
   symbol: string;
   range: TrendRange;
   onRangeChange: (r: TrendRange) => void;
   candles: CandlePoint[] | undefined;
   up: boolean;
+  chartMode: ChartMode;
+  onChartModeChange: (m: ChartMode) => void;
+  peData: { date: string; value: number }[] | null;
 }) {
   const maxVolume = candles && candles.length ? Math.max(...candles.map((c) => c.volume)) : 0;
+  const priceData = candles?.map((c) => ({ date: c.date, value: c.close })) ?? [];
+  const chartData = chartMode === "pe" ? peData ?? [] : priceData;
 
   return (
     <Card
       title={`${symbol} — Trend`}
       action={
-        <div className="flex items-center gap-1 rounded-lg bg-background/60 p-0.5">
-          {TREND_RANGES.map((r) => (
-            <button
-              key={r}
-              onClick={() => onRangeChange(r)}
-              className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors ${
-                range === r ? "bg-brand text-white" : "text-foreground/50 hover:text-foreground"
-              }`}
-            >
-              {r}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <ChartModeToggle mode={chartMode} onChange={onChartModeChange} />
+          <RangeSelector ranges={TREND_RANGES} value={range} onChange={onRangeChange} />
         </div>
       }
     >
-      {!candles ? (
+      {chartMode === "pe" && !peData ? (
+        <p className="text-sm text-foreground/50 py-10 text-center">P/E history unavailable for this stock.</p>
+      ) : !candles && chartMode === "price" ? (
         <p className="text-sm text-foreground/50 py-10 text-center">Loading chart…</p>
-      ) : candles.length === 0 ? (
+      ) : chartData.length === 0 ? (
         <p className="text-sm text-foreground/50 py-10 text-center">No historical data available for this range.</p>
       ) : (
         <>
           <PriceAreaChart
-            data={candles.map((c) => ({ date: c.date, price: c.close }))}
+            data={chartData}
             color={up ? "#15803d" : "#dc2626"}
             height={260}
+            valueLabel={chartMode === "pe" ? "P/E" : "Price"}
+            valueFormat={chartMode === "pe" ? (v) => `${v.toFixed(1)}x` : undefined}
           />
-          {maxVolume > 0 && (
+          {chartMode === "price" && candles && maxVolume > 0 && (
             <>
               <div className="flex items-end gap-0.5 h-9 mt-2">
                 {candles.map((c, i) => (

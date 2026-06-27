@@ -101,10 +101,14 @@ export function PriceAreaChart({
   data,
   color = "#4f46e5",
   height = 220,
+  valueLabel = "Price",
+  valueFormat = (v: number) => `₹${v.toFixed(2)}`,
 }: {
-  data: { date: string; price: number }[];
+  data: { date: string; value: number }[];
   color?: string;
   height?: number;
+  valueLabel?: string;
+  valueFormat?: (v: number) => string;
 }) {
   const gradId = `grad-${color.replace("#", "")}`;
   return (
@@ -120,11 +124,59 @@ export function PriceAreaChart({
         <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#8b91a8" }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 11, fill: "#8b91a8" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
         <Tooltip
-          formatter={(v) => [`₹${Number(v).toFixed(2)}`, "Price"]}
+          formatter={(v) => [valueFormat(Number(v)), valueLabel]}
           contentStyle={{ borderRadius: 8, border: "1px solid #e7e9f3", fontSize: 12 }}
         />
-        <Area type="monotone" dataKey="price" stroke={color} strokeWidth={2} fill={`url(#${gradId})`} />
+        <Area type="monotone" dataKey="value" stroke={color} strokeWidth={2} fill={`url(#${gradId})`} />
       </AreaChart>
     </ResponsiveContainer>
+  );
+}
+
+export type ChartMode = "price" | "pe";
+
+export function RangeSelector<T extends string>({
+  ranges,
+  value,
+  onChange,
+}: {
+  ranges: T[];
+  value: T;
+  onChange: (range: T) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 rounded-lg bg-background/60 p-0.5">
+      {ranges.map((r) => (
+        <button
+          key={r}
+          onClick={() => onChange(r)}
+          className={clsx(
+            "text-xs font-semibold px-2.5 py-1 rounded-md transition-colors",
+            value === r ? "bg-brand text-white" : "text-foreground/50 hover:text-foreground"
+          )}
+        >
+          {r}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function ChartModeToggle({ mode, onChange }: { mode: ChartMode; onChange: (mode: ChartMode) => void }) {
+  return (
+    <div className="flex items-center gap-1 rounded-lg bg-background/60 p-0.5">
+      {(["price", "pe"] as ChartMode[]).map((m) => (
+        <button
+          key={m}
+          onClick={() => onChange(m)}
+          className={clsx(
+            "text-xs font-semibold px-2.5 py-1 rounded-md transition-colors",
+            mode === m ? "bg-brand text-white" : "text-foreground/50 hover:text-foreground"
+          )}
+        >
+          {m === "price" ? "Price" : "P/E"}
+        </button>
+      ))}
+    </div>
   );
 }

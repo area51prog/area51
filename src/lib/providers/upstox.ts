@@ -323,6 +323,7 @@ export async function getUpstoxFundamentals(
     name: r.name ?? "",
     companyValue: r.company_value ?? "—",
     sectorValue: r.sector_value ?? "—",
+    history: r.history,
   }));
 
   const shareholding: ShareholdingSlice[] = (shareholdingData ?? [])
@@ -356,4 +357,12 @@ export async function getUpstoxFundamentals(
   if (!profile && keyRatios.length === 0 && shareholding.length === 0) return null;
 
   return { profile, keyRatios, shareholding, corporateActions, competitors };
+}
+
+// Upstox doesn't document a fixed enum of key-ratio names, so find the P/E
+// entry by fuzzy match rather than relying on an exact, unverified label.
+export function getPeHistory(fundamentals: CompanyFundamentals): { date: string; value: number }[] | null {
+  const peRatio = fundamentals.keyRatios.find((r) => /p\s*\/?\s*e\s*ratio|^pe$/i.test(r.name));
+  if (!peRatio?.history?.length) return null;
+  return peRatio.history.map((h) => ({ date: h.period, value: h.value }));
 }

@@ -1,16 +1,42 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useParams, notFound } from "next/navigation";
 import { Download, Sparkles, Loader2, RefreshCw } from "lucide-react";
 import { useResearch } from "@/lib/useResearch";
-import { useStockSummary } from "@/lib/useStockSummary";
-import { Card, PriceAreaChart, RatingPill } from "@/components/ui";
+import { useStockSummary, TrendRange } from "@/lib/useStockSummary";
+import { getStock } from "@/lib/mock-data";
+import { derivePeHistory } from "@/lib/peHistory";
+import { Card, ChartMode, ChartModeToggle, PriceAreaChart, RangeSelector, RatingPill } from "@/components/ui";
+
+const TREND_RANGES: TrendRange[] = ["1D", "1W", "1M", "1Y", "5Y"];
 
 export default function ResearchDetailPage() {
   const params = useParams<{ symbol: string }>();
   const symbol = params.symbol;
-  const stock = useStockSummary(symbol);
+  const [range, setRange] = useState<TrendRange>("1Y");
+  const [chartMode, setChartMode] = useState<ChartMode>("price");
+  const [livePeHistory, setLivePeHistory] = useState<{ date: string; value: number }[] | null>(null);
+  const stock = useStockSummary(symbol, range);
   const { report, generatedAt, stale, generating, ready, error, generate } = useResearch(symbol);
+
+  const mockStock = getStock(symbol);
+
+  useEffect(() => {
+    if (mockStock) return;
+    let cancelled = false;
+    fetch(`/api/stocks/${encodeURIComponent(symbol)}/pe-history`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (!cancelled) setLivePeHistory(body.ok ? body.peHistory : null);
+      })
+      .catch(() => {
+        if (!cancelled) setLivePeHistory(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, mockStock]);
 
   if (stock === null) return notFound();
   if (stock === undefined || !ready) return null;
@@ -122,8 +148,27 @@ export default function ResearchDetailPage() {
         <p className="text-sm text-foreground/70 leading-relaxed">{report.summary}</p>
       </Card>
 
-      <Card title="Price trend">
-        <PriceAreaChart data={stock.history} />
+      <Card
+        title="Price trend"
+        action={
+          <div className="flex items-center gap-2">
+            <ChartModeToggle mode={chartMode} onChange={setChartMode} />
+            <RangeSelector ranges={TREND_RANGES} value={range} onChange={setRange} />
+          </div>
+        }
+      >
+        {chartMode === "pe" ? (
+          (() => {
+            const peData = mockStock ? derivePeHistory(mockStock) : livePeHistory;
+            return peData ? (
+              <PriceAreaChart data={peData} valueLabel="P/E" valueFormat={(v) => `${v.toFixed(1)}x`} />
+            ) : (
+              <p className="text-sm text-foreground/50 py-10 text-center">P/E history unavailable for this stock.</p>
+            );
+          })()
+        ) : (
+          <PriceAreaChart data={stock.history.map((h) => ({ date: h.date, value: h.price }))} />
+        )}
       </Card>
 
       <Card title="Scenarios">
