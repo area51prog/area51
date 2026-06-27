@@ -1,19 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Plus, Trash2, Pencil } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { getStock, STOCKS } from "@/lib/mock-data";
+import { getStock } from "@/lib/mock-data";
 import { usePortfolio, SUMMARY_ID, Position } from "@/lib/usePortfolio";
 import { useProfile } from "@/lib/useProfile";
 import { useQuotes } from "@/lib/useQuotes";
 import { withLiveQuote } from "@/lib/liveStock";
+import { Exchange, Stock } from "@/lib/types";
 import { formatINR, formatINRCompact } from "@/lib/format";
 import { Card, ChangeBadge, LiveBadge } from "@/components/ui";
 import { ListSwitcher } from "@/components/ListSwitcher";
 
 const COLORS = ["#1a2348", "#4f46e5", "#7c83e8", "#a5abf2", "#c8ccf8", "#15803d"];
+
+interface SymbolResult {
+  symbol: string;
+  name: string;
+  exchange: Exchange;
+}
 
 export default function PortfolioPage() {
   const {
@@ -34,6 +41,8 @@ export default function PortfolioPage() {
   const { quotes, sources } = useQuotes(positions.map((p) => p.symbol));
   const [adding, setAdding] = useState(false);
   const [editingSymbol, setEditingSymbol] = useState<string | null>(null);
+  const [info, setInfo] = useState<Record<string, SymbolResult>>({});
+  const fetchedInfoRef = useRef<Set<string>>(new Set());
 
   // Close any open Add / Buy-Sell form when the selected portfolio changes (incl. switching
   // to/from Summary) — those forms act on a specific portfolio and shouldn't linger.
@@ -44,16 +53,70 @@ export default function PortfolioPage() {
     setEditingSymbol(null);
   }
 
+  // Holdings in stocks beyond the small built-in mock set need their name/exchange
+  // looked up from the live NSE/BSE instrument master.
+  const unresolved = positions.map((p) => p.symbol).filter((s) => !getStock(s) && !info[s]);
+  useEffect(() => {
+    const toFetch = unresolved.filter((s) => !fetchedInfoRef.current.has(s));
+    if (toFetch.length === 0) return;
+    toFetch.forEach((s) => fetchedInfoRef.current.add(s));
+
+    let cancelled = false;
+    Promise.all(
+      toFetch.map((s) =>
+        fetch(`/api/symbols/lookup?symbol=${encodeURIComponent(s)}`)
+          .then((res) => res.json())
+          .then((body) => ({ symbol: s, instrument: body.ok ? body.instrument : null }))
+          .catch(() => ({ symbol: s, instrument: null }))
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      setInfo((prev) => {
+        const next = { ...prev };
+        for (const { symbol, instrument } of results) {
+          if (instrument) next[symbol] = instrument;
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `unresolved` is derived fresh each render from `positions`/`info`
+  }, [unresolved.join(",")]);
+
   const rows = positions.map((p) => {
-    const baseStock = getStock(p.symbol);
+    const mock = getStock(p.symbol);
+    const resolved = info[p.symbol];
+    const baseStock: Stock | null = mock
+      ? mock
+      : resolved
+        ? {
+            symbol: p.symbol,
+            name: resolved.name,
+            exchange: resolved.exchange,
+            sector: "—",
+            price: 0,
+            prevClose: 0,
+            dayHigh: 0,
+            dayLow: 0,
+            week52High: 0,
+            week52Low: 0,
+            marketCapCr: 0,
+            peRatio: null,
+            history: [],
+          }
+        : null;
     const s = baseStock ? withLiveQuote(baseStock, quotes[p.symbol]) : null;
+    const priceKnown = Boolean(s && s.price > 0);
     const invested = p.avgPrice * p.quantity;
-    const value = (s?.price ?? p.avgPrice) * p.quantity;
+    const value = (priceKnown ? s!.price : p.avgPrice) * p.quantity;
     const gain = value - invested;
     const gainPct = invested ? (gain / invested) * 100 : 0;
-    const dayChangePct = s ? ((s.price - s.prevClose) / s.prevClose) * 100 : 0;
-    const dayPnl = s ? (s.price - s.prevClose) * p.quantity : 0;
-    return { p, s, invested, value, gain, gainPct, dayChangePct, dayPnl };
+    const dayChangePct = priceKnown ? ((s!.price - s!.prevClose) / s!.prevClose) * 100 : 0;
+    const dayPnl = priceKnown ? (s!.price - s!.prevClose) * p.quantity : 0;
+    return { p, s, priceKnown, invested, value, gain, gainPct, dayChangePct, dayPnl };
   });
 
   const totalValue = rows.reduce((sum, r) => sum + r.value, 0);
@@ -184,8 +247,8 @@ export default function PortfolioPage() {
                       </td>
                       <td className="py-3 text-right">{r.p.quantity}</td>
                       <td className="py-3 text-right">₹{formatINR(r.p.avgPrice)}</td>
-                      <td className="py-3 text-right">{r.s ? `₹${formatINR(r.s.price)}` : "—"}</td>
-                      <td className="py-3 text-right">{r.s && <ChangeBadge percent={r.dayChangePct} />}</td>
+                      <td className="py-3 text-right">{r.priceKnown ? `₹${formatINR(r.s!.price)}` : "—"}</td>
+                      <td className="py-3 text-right">{r.priceKnown && <ChangeBadge percent={r.dayChangePct} />}</td>
                       <td className="py-3 text-right font-medium">{formatINRCompact(r.value)}</td>
                       <td className={`py-3 text-right font-semibold ${r.gain >= 0 ? "text-up" : "text-down"}`}>
                         {r.gain >= 0 ? "+" : ""}
@@ -241,19 +304,47 @@ function AddHoldingForm({
   onAdd: (input: { symbol: string; quantity: number; avgPrice: number; buyDate: string }) => Promise<{ error?: string }>;
   onDone: () => void;
 }) {
-  const [symbol, setSymbol] = useState(STOCKS[0]?.symbol ?? "");
+  const [symbol, setSymbol] = useState("");
+  const [name, setName] = useState("");
+  const [query, setQuery] = useState("");
+  const [candidates, setCandidates] = useState<SymbolResult[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
   const [quantity, setQuantity] = useState("");
   const [avgPrice, setAvgPrice] = useState("");
   const [buyDate, setBuyDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing results when the query is emptied
+      setCandidates([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        const res = await fetch(`/api/symbols/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+        const body = await res.json();
+        setCandidates(body.ok ? body.results : []);
+      } catch {
+        // Aborted or network error — leave the previous results in place.
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const qty = Number(quantity);
     const price = Number(avgPrice);
     if (!symbol || !qty || qty <= 0 || !price || price < 0 || !buyDate) {
-      setError("Enter a valid quantity, average price, and buy date.");
+      setError("Search for and select a stock, then enter a valid quantity, average price, and buy date.");
       return;
     }
     setError("");
@@ -270,19 +361,41 @@ function AddHoldingForm({
   return (
     <Card>
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-        <label className="block">
+        <label className="block relative">
           <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Stock</span>
-          <select
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
+          <input
+            value={symbol ? `${symbol} — ${name}` : query}
+            onChange={(e) => {
+              setSymbol("");
+              setName("");
+              setQuery(e.target.value);
+            }}
+            placeholder="Search stocks to add…"
             className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-          >
-            {STOCKS.map((s) => (
-              <option key={s.symbol} value={s.symbol}>
-                {s.symbol} — {s.name}
-              </option>
-            ))}
-          </select>
+          />
+          {!symbol && candidates.length > 0 && (
+            <div className="absolute top-full mt-1 left-0 w-full bg-surface border border-line rounded-lg shadow-lg z-30 max-h-56 overflow-y-auto">
+              {candidates.map((c) => (
+                <button
+                  key={c.symbol}
+                  type="button"
+                  onClick={() => {
+                    setSymbol(c.symbol);
+                    setName(c.name);
+                    setQuery("");
+                    setCandidates([]);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-background text-left"
+                >
+                  <span>
+                    <span className="font-semibold text-heading">{c.symbol}</span>{" "}
+                    <span className="text-foreground/50">{c.name}</span>
+                  </span>
+                  <span className="text-foreground/40 text-xs">{c.exchange}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </label>
         <label className="block">
           <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Quantity</span>

@@ -1,14 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Star, Trash2, Plus, FileSearch } from "lucide-react";
-import { getStock, STOCKS } from "@/lib/mock-data";
+import { getStock } from "@/lib/mock-data";
 import { useWatchlist } from "@/lib/useWatchlist";
 import { useQuotes } from "@/lib/useQuotes";
 import { withLiveQuote } from "@/lib/liveStock";
+import { Exchange, Stock } from "@/lib/types";
 import { Card, ChangeBadge, LiveBadge } from "@/components/ui";
 import { ListSwitcher } from "@/components/ListSwitcher";
+
+interface SymbolResult {
+  symbol: string;
+  name: string;
+  exchange: Exchange;
+}
 
 export default function WatchlistPage() {
   const { lists, activeListId, switchList, createList, renameList, deleteList, symbols, ready, remove, add } =
@@ -16,15 +23,92 @@ export default function WatchlistPage() {
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const [addError, setAddError] = useState("");
+  const [candidates, setCandidates] = useState<SymbolResult[]>([]);
+  const [info, setInfo] = useState<Record<string, SymbolResult>>({});
+  const abortRef = useRef<AbortController | null>(null);
+  const fetchedInfoRef = useRef<Set<string>>(new Set());
 
-  const baseStocks = symbols.map((s) => getStock(s)).filter((s): s is NonNullable<typeof s> => Boolean(s));
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing results when the query is emptied
+      setCandidates([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        const res = await fetch(`/api/symbols/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+        const body = await res.json();
+        const results: SymbolResult[] = body.ok ? body.results : [];
+        setCandidates(results.filter((r) => !symbols.includes(r.symbol)));
+      } catch {
+        // Aborted or network error — leave the previous results in place.
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `symbols` is only used to filter already-tracked results
+  }, [query]);
+
+  // Stocks added beyond the small built-in mock set need their name/exchange
+  // looked up from the live NSE/BSE instrument master.
+  const unresolved = symbols.filter((s) => !getStock(s) && !info[s]);
+  useEffect(() => {
+    const toFetch = unresolved.filter((s) => !fetchedInfoRef.current.has(s));
+    if (toFetch.length === 0) return;
+    toFetch.forEach((s) => fetchedInfoRef.current.add(s));
+
+    let cancelled = false;
+    Promise.all(
+      toFetch.map((s) =>
+        fetch(`/api/symbols/lookup?symbol=${encodeURIComponent(s)}`)
+          .then((res) => res.json())
+          .then((body) => ({ symbol: s, instrument: body.ok ? body.instrument : null }))
+          .catch(() => ({ symbol: s, instrument: null }))
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      setInfo((prev) => {
+        const next = { ...prev };
+        for (const { symbol, instrument } of results) {
+          if (instrument) next[symbol] = instrument;
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `unresolved` is derived fresh each render from `symbols`/`info`
+  }, [unresolved.join(",")]);
+
+  const baseStocks: Stock[] = symbols.map((s) => {
+    const mock = getStock(s);
+    if (mock) return mock;
+    const resolved = info[s];
+    return {
+      symbol: s,
+      name: resolved?.name ?? s,
+      exchange: resolved?.exchange ?? "NSE",
+      sector: "—",
+      price: 0,
+      prevClose: 0,
+      dayHigh: 0,
+      dayLow: 0,
+      week52High: 0,
+      week52Low: 0,
+      marketCapCr: 0,
+      peRatio: null,
+      history: [],
+    };
+  });
   const { quotes, sources } = useQuotes(baseStocks.map((s) => s.symbol));
   const stocks = baseStocks.map((s) => withLiveQuote(s, quotes[s.symbol]));
-  const candidates = STOCKS.filter(
-    (s) =>
-      !symbols.includes(s.symbol) &&
-      (s.symbol.toLowerCase().includes(query.toLowerCase()) || s.name.toLowerCase().includes(query.toLowerCase()))
-  );
 
   if (!ready) return null;
 
@@ -75,6 +159,7 @@ export default function WatchlistPage() {
                         : error
                       : ""
                   );
+                  if (!error) setInfo((prev) => ({ ...prev, [s.symbol]: s }));
                   setQuery("");
                 }}
                 className="w-full flex items-center justify-between py-2.5 text-left hover:bg-background/60 rounded-lg px-2 -mx-2"
@@ -83,7 +168,7 @@ export default function WatchlistPage() {
                   <span className="font-semibold text-heading text-sm">{s.symbol}</span>{" "}
                   <span className="text-foreground/50 text-sm">{s.name}</span>
                 </span>
-                <span className="text-sm text-foreground/60">₹{s.price.toFixed(2)}</span>
+                <span className="text-xs text-foreground/40">{s.exchange}</span>
               </button>
             ))}
           </div>
@@ -110,7 +195,7 @@ export default function WatchlistPage() {
             </thead>
             <tbody className="divide-y divide-line">
               {stocks.map((s) => {
-                const pct = ((s.price - s.prevClose) / s.prevClose) * 100;
+                const pct = s.prevClose ? ((s.price - s.prevClose) / s.prevClose) * 100 : 0;
                 return (
                   <tr key={s.symbol} className="group">
                     <td className="py-3">
@@ -122,7 +207,7 @@ export default function WatchlistPage() {
                         </span>
                       </Link>
                     </td>
-                    <td className="py-3 text-right font-medium">₹{s.price.toFixed(2)}</td>
+                    <td className="py-3 text-right font-medium">{s.price ? `₹${s.price.toFixed(2)}` : "—"}</td>
                     <td className="py-3 text-right">
                       <ChangeBadge percent={pct} />
                     </td>
@@ -130,7 +215,7 @@ export default function WatchlistPage() {
                       <LiveBadge source={sources[s.symbol]} />
                     </td>
                     <td className="py-3 text-right text-foreground/50 hidden sm:table-cell">
-                      ₹{s.week52Low.toFixed(0)} – ₹{s.week52High.toFixed(0)}
+                      {s.week52High ? `₹${s.week52Low.toFixed(0)} – ₹${s.week52High.toFixed(0)}` : "—"}
                     </td>
                     <td className="py-3 text-right text-foreground/50 hidden sm:table-cell">
                       {s.peRatio?.toFixed(1) ?? "—"}
