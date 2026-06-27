@@ -106,10 +106,16 @@ export default function LandingPage() {
               <h3 className="text-lg font-bold text-heading">Free</h3>
               <ul className="space-y-2.5 mt-4 text-sm text-foreground/70">
                 <li>1 watchlist</li>
-                <li>Up to 50 items per list</li>
                 <li>1 portfolio</li>
+                <li>Up to 50 items per list</li>
                 <li>Live NSE &amp; BSE pricing</li>
               </ul>
+              <Link
+                href="/signup"
+                className="block text-center rounded-lg bg-brand text-white text-sm font-semibold px-5 py-2.5 mt-6 hover:bg-brand/90 transition-colors"
+              >
+                Sign up
+              </Link>
             </Card>
 
             <Card className="!p-6 border-brand/40 relative">
@@ -120,11 +126,18 @@ export default function LandingPage() {
               <p className="text-xs font-semibold text-foreground/50 mt-1">Coming soon</p>
               <ul className="space-y-2.5 mt-4 text-sm text-foreground/70">
                 <li>Up to 5 watchlists</li>
-                <li>Up to 100 items per list</li>
                 <li>Up to 5 portfolios</li>
+                <li>Up to 100 items per list</li>
                 <li>AI equity research &amp; ratings</li>
                 <li>Dividend calendar</li>
+                <li>Advanced portfolio analytics</li>
               </ul>
+              <button
+                disabled
+                className="block w-full text-center rounded-lg bg-foreground/15 text-foreground/40 text-sm font-semibold px-5 py-2.5 mt-6 cursor-not-allowed"
+              >
+                Sign up
+              </button>
             </Card>
           </div>
         </section>
