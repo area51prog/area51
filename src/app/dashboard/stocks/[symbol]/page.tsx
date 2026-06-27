@@ -4,15 +4,18 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Star, FileSearch } from "lucide-react";
-import { getStock, getPortfolioHistory, PortfolioRange } from "@/lib/mock-data";
+import { Star, FileSearch, LayoutDashboard, TrendingUp, Building2 } from "lucide-react";
+import { getStock } from "@/lib/mock-data";
 import { useWatchlist } from "@/lib/useWatchlist";
 import { usePortfolio } from "@/lib/usePortfolio";
-import { useQuotes, LiveQuote, QuoteSource } from "@/lib/useQuotes";
-import { withLiveQuote } from "@/lib/liveStock";
 import { formatINR, formatINRCompact } from "@/lib/format";
-import { Card, ChangeBadge, LiveBadge, PriceAreaChart } from "@/components/ui";
-import { Exchange } from "@/lib/types";
+import { Card, ChangeBadge, PriceAreaChart } from "@/components/ui";
+import {
+  Exchange,
+  FullQuote,
+  CandlePoint,
+  CompanyFundamentals,
+} from "@/lib/types";
 
 interface InstrumentInfo {
   symbol: string;
@@ -20,22 +23,37 @@ interface InstrumentInfo {
   exchange: Exchange;
 }
 
-const TREND_RANGES: PortfolioRange[] = ["1D", "1W", "1M", "1Y", "5Y"];
+type TrendRange = "1D" | "1W" | "1M" | "1Y" | "5Y";
+const TREND_RANGES: TrendRange[] = ["1D", "1W", "1M", "1Y", "5Y"];
+
+type Tab = "overview" | "trends" | "fundamentals";
+const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "trends", label: "Trends", icon: TrendingUp },
+  { id: "fundamentals", label: "Fundamentals", icon: Building2 },
+];
+
+const QUOTE_REFRESH_MS = 60_000;
 
 export default function StockDetailPage() {
   const params = useParams<{ symbol: string }>();
   const symbol = params.symbol;
-  const baseStock = getStock(symbol);
+  const mockStock = getStock(symbol);
 
-  // Only symbols outside the curated mock universe need a lookup — they
-  // still resolve via the live NSE/BSE instrument master, just with a
-  // reduced "key stats" panel (no sector/market cap/P/E/history).
-  const [instrument, setInstrument] = useState<InstrumentInfo | null | undefined>(
-    baseStock ? null : undefined
-  );
+  const { symbols, toggle } = useWatchlist();
+  const { positions } = usePortfolio();
+
+  const [tab, setTab] = useState<Tab>("overview");
+  const [trendRange, setTrendRange] = useState<TrendRange>("1Y");
+
+  const [instrument, setInstrument] = useState<InstrumentInfo | null | undefined>(undefined);
+  const [apiConnected, setApiConnected] = useState(true);
+  const [quote, setQuote] = useState<FullQuote | null | undefined>(undefined);
+  const [yearCandles, setYearCandles] = useState<CandlePoint[]>([]);
+  const [trendCandles, setTrendCandles] = useState<CandlePoint[] | undefined>(undefined);
+  const [fundamentals, setFundamentals] = useState<CompanyFundamentals | null | undefined>(undefined);
 
   useEffect(() => {
-    if (baseStock) return;
     let cancelled = false;
     fetch(`/api/symbols/lookup?symbol=${encodeURIComponent(symbol)}`)
       .then((res) => res.json())
@@ -48,21 +66,9 @@ export default function StockDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [symbol, baseStock]);
-
-  const [trendRange, setTrendRange] = useState<PortfolioRange>("1Y");
-
-  const { symbols, toggle } = useWatchlist();
-  const { positions } = usePortfolio();
-  const liveOnlySymbol = !baseStock && instrument ? instrument.symbol : undefined;
-  const { quotes, sources, loading } = useQuotes(
-    baseStock ? [baseStock.symbol] : liveOnlySymbol ? [liveOnlySymbol] : []
-  );
-
-  const [apiConnected, setApiConnected] = useState(true);
+  }, [symbol]);
 
   useEffect(() => {
-    if (baseStock) return;
     let cancelled = false;
     fetch("/api/upstox/status")
       .then((res) => res.json())
@@ -75,138 +81,82 @@ export default function StockDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [baseStock]);
+  }, [symbol]);
 
-  if (!baseStock) {
-    if (instrument === undefined) return null;
-    if (instrument === null) return notFound();
-    return (
-      <LiveOnlyStockView
-        instrument={instrument}
-        quote={quotes[instrument.symbol]}
-        source={sources[instrument.symbol]}
-        loading={loading}
-        apiConnected={apiConnected}
-        inWatchlist={symbols.includes(instrument.symbol)}
-        onToggleWatchlist={() => toggle(instrument.symbol)}
-      />
-    );
-  }
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchQuote() {
+      try {
+        const res = await fetch(`/api/stocks/${encodeURIComponent(symbol)}/quote`);
+        const body = await res.json();
+        if (!cancelled) setQuote(body.ok ? body.quote : null);
+      } catch {
+        if (!cancelled) setQuote(null);
+      }
+    }
+    fetchQuote();
+    const interval = setInterval(fetchQuote, QUOTE_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [symbol]);
 
-  const quote = quotes[baseStock.symbol];
-  const stock = withLiveQuote(baseStock, quote);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/stocks/${encodeURIComponent(symbol)}/history?range=1Y`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (!cancelled) setYearCandles(body.ok ? body.candles : []);
+      })
+      .catch(() => {
+        if (!cancelled) setYearCandles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
 
-  const pct = ((stock.price - stock.prevClose) / stock.prevClose) * 100;
-  const change = stock.price - stock.prevClose;
-  const inWatchlist = symbols.includes(stock.symbol);
-  const holding = positions.find((p) => p.symbol === stock.symbol);
-  const trendHistory = getPortfolioHistory(stock.price, trendRange);
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- show a loading state while the new range's candles load
+    setTrendCandles(undefined);
+    fetch(`/api/stocks/${encodeURIComponent(symbol)}/history?range=${trendRange}`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (!cancelled) setTrendCandles(body.ok ? body.candles : []);
+      })
+      .catch(() => {
+        if (!cancelled) setTrendCandles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, trendRange]);
 
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold text-heading">{stock.symbol}</h2>
-            <span className="text-xs font-semibold text-foreground/40 bg-background rounded px-1.5 py-0.5">
-              {stock.exchange}
-            </span>
-          </div>
-          <p className="text-sm text-foreground/60">{stock.name} · {stock.sector}</p>
-          <div className="flex items-baseline gap-3 mt-3">
-            <span className="text-3xl font-bold text-heading">₹{formatINR(stock.price)}</span>
-            <ChangeBadge value={change} percent={pct} />
-            {!loading && <LiveBadge source={sources[stock.symbol]} />}
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => toggle(stock.symbol)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3.5 py-2 text-sm font-medium hover:bg-background"
-          >
-            <Star size={15} className={inWatchlist ? "text-amber-400 fill-amber-400" : "text-foreground/40"} />
-            {inWatchlist ? "In watchlist" : "Add to watchlist"}
-          </button>
-          <Link
-            href={`/dashboard/research/${stock.symbol}`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white px-3.5 py-2 text-sm font-semibold hover:bg-brand/90"
-          >
-            <FileSearch size={15} /> Research
-          </Link>
-        </div>
-      </div>
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/stocks/${encodeURIComponent(symbol)}/fundamentals`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (!cancelled) setFundamentals(body.ok ? body.fundamentals : null);
+      })
+      .catch(() => {
+        if (!cancelled) setFundamentals(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card
-          title={`${stock.symbol} — Trend`}
-          className="lg:col-span-2"
-          action={
-            <div className="flex items-center gap-1 rounded-lg bg-background/60 p-0.5">
-              {TREND_RANGES.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setTrendRange(r)}
-                  className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors ${
-                    trendRange === r ? "bg-brand text-white" : "text-foreground/50 hover:text-foreground"
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          }
-        >
-          <PriceAreaChart data={trendHistory} color={pct >= 0 ? "#15803d" : "#dc2626"} height={280} />
-        </Card>
-        <Card title="Key stats">
-          <dl className="space-y-3 text-sm">
-            <Row label="Day range" value={`₹${formatINR(stock.dayLow)} – ₹${formatINR(stock.dayHigh)}`} />
-            <Row label="52 week range" value={`₹${formatINR(stock.week52Low)} – ₹${formatINR(stock.week52High)}`} />
-            <Row label="Market cap" value={`₹${formatINR(stock.marketCapCr, 0)} cr`} />
-            <Row label="P/E ratio" value={stock.peRatio ? stock.peRatio.toFixed(1) + "x" : "—"} />
-            <Row label="Prev close" value={`₹${formatINR(stock.prevClose)}`} />
-          </dl>
-        </Card>
-      </div>
+  if (instrument === undefined) return null;
+  if (instrument === null) return notFound();
 
-      {holding && (
-        <Card title="Your position">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-            <Row label="Quantity" value={String(holding.quantity)} />
-            <Row label="Avg. cost" value={`₹${formatINR(holding.avgPrice)}`} />
-            <Row label="Current value" value={formatINRCompact(stock.price * holding.quantity)} />
-            <Row
-              label="P&L"
-              value={`${stock.price * holding.quantity - holding.avgPrice * holding.quantity >= 0 ? "+" : ""}${formatINRCompact(
-                stock.price * holding.quantity - holding.avgPrice * holding.quantity
-              )}`}
-            />
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function LiveOnlyStockView({
-  instrument,
-  quote,
-  source,
-  loading,
-  apiConnected,
-  inWatchlist,
-  onToggleWatchlist,
-}: {
-  instrument: InstrumentInfo;
-  quote?: LiveQuote;
-  source?: QuoteSource;
-  loading: boolean;
-  apiConnected: boolean;
-  inWatchlist: boolean;
-  onToggleWatchlist: () => void;
-}) {
-  const pct = quote ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : 0;
-  const change = quote ? quote.price - quote.prevClose : 0;
+  const inWatchlist = symbols.includes(instrument.symbol);
+  const holding = positions.find((p) => p.symbol === instrument.symbol);
+  const pct = quote && quote.prevClose ? ((quote.price - quote.prevClose) / quote.prevClose) * 100 : 0;
+  const week52High = yearCandles.length ? Math.max(...yearCandles.map((c) => c.high)) : null;
+  const week52Low = yearCandles.length ? Math.min(...yearCandles.map((c) => c.low)) : null;
 
   return (
     <div className="space-y-5">
@@ -223,10 +173,12 @@ function LiveOnlyStockView({
             {quote ? (
               <>
                 <span className="text-3xl font-bold text-heading">₹{formatINR(quote.price)}</span>
-                <ChangeBadge value={change} percent={pct} />
-                {!loading && <LiveBadge source={source} />}
+                <ChangeBadge value={quote.netChange} percent={pct} />
+                <span className="text-[11px] font-semibold text-up flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-up" /> Live · Upstox
+                </span>
               </>
-            ) : loading ? (
+            ) : quote === undefined ? (
               <span className="text-sm text-foreground/50">Loading price…</span>
             ) : !apiConnected ? (
               <span className="text-sm text-foreground/50">
@@ -241,27 +193,333 @@ function LiveOnlyStockView({
             )}
           </div>
         </div>
-        <button
-          onClick={onToggleWatchlist}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3.5 py-2 text-sm font-medium hover:bg-background"
-        >
-          <Star size={15} className={inWatchlist ? "text-amber-400 fill-amber-400" : "text-foreground/40"} />
-          {inWatchlist ? "In watchlist" : "Add to watchlist"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => toggle(instrument.symbol)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3.5 py-2 text-sm font-medium hover:bg-background"
+          >
+            <Star size={15} className={inWatchlist ? "text-amber-400 fill-amber-400" : "text-foreground/40"} />
+            {inWatchlist ? "In watchlist" : "Add to watchlist"}
+          </button>
+          {mockStock && (
+            <Link
+              href={`/dashboard/research/${instrument.symbol}`}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white px-3.5 py-2 text-sm font-semibold hover:bg-brand/90"
+            >
+              <FileSearch size={15} /> Research
+            </Link>
+          )}
+        </div>
       </div>
 
-      {quote && (
-        <Card title="Key stats">
-          <dl className="space-y-3 text-sm">
-            <Row label="Day range" value={`₹${formatINR(quote.low)} – ₹${formatINR(quote.high)}`} />
-            <Row label="Prev close" value={`₹${formatINR(quote.prevClose)}`} />
-          </dl>
+      <div className="flex items-center gap-1 rounded-lg bg-surface border border-line p-1 w-fit">
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3.5 py-1.5 rounded-md transition-colors ${
+              tab === id ? "bg-brand text-white" : "text-foreground/50 hover:text-foreground"
+            }`}
+          >
+            <Icon size={15} /> {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" && (
+        <OverviewTab quote={quote} week52High={week52High} week52Low={week52Low} holding={holding} price={quote?.price} />
+      )}
+
+      {tab === "trends" && (
+        <TrendsTab
+          symbol={instrument.symbol}
+          range={trendRange}
+          onRangeChange={setTrendRange}
+          candles={trendCandles}
+          up={pct >= 0}
+        />
+      )}
+
+      {tab === "fundamentals" && <FundamentalsTab fundamentals={fundamentals} />}
+    </div>
+  );
+}
+
+function OverviewTab({
+  quote,
+  week52High,
+  week52Low,
+  holding,
+  price,
+}: {
+  quote: FullQuote | null | undefined;
+  week52High: number | null;
+  week52Low: number | null;
+  holding?: { quantity: number; avgPrice: number };
+  price?: number;
+}) {
+  if (!quote) {
+    return (
+      <Card>
+        <p className="text-sm text-foreground/50 py-6 text-center">
+          Live quote data isn&apos;t available right now.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <Stat label="Day range" value={`₹${formatINR(quote.low)} – ₹${formatINR(quote.high)}`} />
+        <Stat
+          label="52 week range"
+          value={week52High && week52Low ? `₹${formatINR(week52Low)} – ₹${formatINR(week52High)}` : "—"}
+        />
+        <Stat label="Prev close" value={`₹${formatINR(quote.prevClose)}`} />
+        <Stat label="Volume" value={`${(quote.volume / 1_00_000).toFixed(2)}L shares`} />
+        <Stat label="Avg traded price" value={`₹${formatINR(quote.averagePrice)}`} />
+        <Stat
+          label="Circuit limits"
+          value={`₹${formatINR(quote.lowerCircuitLimit)} – ₹${formatINR(quote.upperCircuitLimit)}`}
+        />
+      </div>
+
+      {(quote.depth.buy.length > 0 || quote.depth.sell.length > 0) && (
+        <Card title="Market depth">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <div className="flex justify-between text-xs text-foreground/50 pb-1 border-b border-line">
+                <span>Bid qty</span>
+                <span>Price</span>
+              </div>
+              {quote.depth.buy.slice(0, 3).map((level, i) => (
+                <div key={i} className="flex justify-between py-1.5 text-up">
+                  <span>{level.quantity.toLocaleString("en-IN")}</span>
+                  <span>{level.price.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="flex justify-between text-xs text-foreground/50 pb-1 border-b border-line">
+                <span>Price</span>
+                <span>Ask qty</span>
+              </div>
+              {quote.depth.sell.slice(0, 3).map((level, i) => (
+                <div key={i} className="flex justify-between py-1.5 text-down">
+                  <span>{level.price.toFixed(2)}</span>
+                  <span>{level.quantity.toLocaleString("en-IN")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </Card>
       )}
 
-      <p className="text-xs text-foreground/40">
-        Sector, market cap, P/E and 12-month history aren&apos;t available for this symbol yet.
-      </p>
+      {holding && price !== undefined && (
+        <Card title="Your position">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+            <Row label="Quantity" value={String(holding.quantity)} />
+            <Row label="Avg. cost" value={`₹${formatINR(holding.avgPrice)}`} />
+            <Row label="Current value" value={formatINRCompact(price * holding.quantity)} />
+            <Row
+              label="P&L"
+              value={`${price * holding.quantity - holding.avgPrice * holding.quantity >= 0 ? "+" : ""}${formatINRCompact(
+                price * holding.quantity - holding.avgPrice * holding.quantity
+              )}`}
+            />
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function TrendsTab({
+  symbol,
+  range,
+  onRangeChange,
+  candles,
+  up,
+}: {
+  symbol: string;
+  range: TrendRange;
+  onRangeChange: (r: TrendRange) => void;
+  candles: CandlePoint[] | undefined;
+  up: boolean;
+}) {
+  const maxVolume = candles && candles.length ? Math.max(...candles.map((c) => c.volume)) : 0;
+
+  return (
+    <Card
+      title={`${symbol} — Trend`}
+      action={
+        <div className="flex items-center gap-1 rounded-lg bg-background/60 p-0.5">
+          {TREND_RANGES.map((r) => (
+            <button
+              key={r}
+              onClick={() => onRangeChange(r)}
+              className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                range === r ? "bg-brand text-white" : "text-foreground/50 hover:text-foreground"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {!candles ? (
+        <p className="text-sm text-foreground/50 py-10 text-center">Loading chart…</p>
+      ) : candles.length === 0 ? (
+        <p className="text-sm text-foreground/50 py-10 text-center">No historical data available for this range.</p>
+      ) : (
+        <>
+          <PriceAreaChart
+            data={candles.map((c) => ({ date: c.date, price: c.close }))}
+            color={up ? "#15803d" : "#dc2626"}
+            height={260}
+          />
+          {maxVolume > 0 && (
+            <>
+              <div className="flex items-end gap-0.5 h-9 mt-2">
+                {candles.map((c, i) => (
+                  <div
+                    key={i}
+                    className="flex-1 bg-brand/20 rounded-sm"
+                    style={{ height: `${Math.max(4, (c.volume / maxVolume) * 100)}%` }}
+                  />
+                ))}
+              </div>
+              <p className="text-xs text-foreground/40 mt-1">Volume · Upstox historical candle data</p>
+            </>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+function FundamentalsTab({ fundamentals }: { fundamentals: CompanyFundamentals | null | undefined }) {
+  if (fundamentals === undefined) {
+    return (
+      <Card>
+        <p className="text-sm text-foreground/50 py-10 text-center">Loading fundamentals…</p>
+      </Card>
+    );
+  }
+
+  if (!fundamentals) {
+    return (
+      <Card>
+        <p className="text-sm text-foreground/50 py-10 text-center">
+          Fundamentals data isn&apos;t available for this symbol right now.
+        </p>
+      </Card>
+    );
+  }
+
+  const { profile, keyRatios, shareholding, corporateActions, competitors } = fundamentals;
+  const shareholdingColors = ["bg-brand", "bg-up", "bg-blue-500", "bg-amber-400", "bg-foreground/20"];
+
+  return (
+    <div className="space-y-4">
+      {profile && (
+        <Card title="Company profile">
+          <p className="text-sm text-foreground/60 leading-relaxed mb-3">{profile.description}</p>
+          <div className="flex gap-6">
+            <div>
+              <div className="text-xs text-foreground/50">Sector</div>
+              <div className="text-sm font-semibold text-heading">{profile.sector}</div>
+            </div>
+            <div>
+              <div className="text-xs text-foreground/50">Sector market cap</div>
+              <div className="text-sm font-semibold text-heading">
+                ₹{formatINR(profile.sectorMarketCapInrCr, 0)} cr
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {keyRatios.length > 0 && (
+        <Card title="Key ratios">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {keyRatios.map((r) => (
+              <div key={r.name} className="bg-background rounded-lg px-3.5 py-2.5">
+                <div className="text-xs text-foreground/50">{r.name}</div>
+                <div className="text-base font-semibold text-heading">{r.companyValue}</div>
+                <div className="text-xs text-foreground/40">sector {r.sectorValue}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {shareholding.length > 0 && (
+        <Card title="Shareholding pattern">
+          <div className="flex h-3.5 rounded-full overflow-hidden">
+            {shareholding.map((s, i) => (
+              <div
+                key={s.category}
+                className={shareholdingColors[i % shareholdingColors.length]}
+                style={{ width: `${s.percent}%` }}
+              />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-3 mt-2 text-xs text-foreground/50">
+            {shareholding.map((s, i) => (
+              <span key={s.category} className="flex items-center gap-1.5">
+                <span className={`h-1.5 w-1.5 rounded-full ${shareholdingColors[i % shareholdingColors.length]}`} />
+                {s.category} {s.percent.toFixed(1)}%
+              </span>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {corporateActions.length > 0 && (
+        <Card title="Corporate actions">
+          <div className="divide-y divide-line">
+            {corporateActions.map((a, i) => (
+              <div key={i} className="flex items-center justify-between py-2 text-sm">
+                <span>{a.details}</span>
+                {a.exDate && <span className="text-foreground/50 text-xs">Ex-date {a.exDate}</span>}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {competitors.length > 0 && (
+        <Card title="Competitors">
+          <div className="flex flex-wrap gap-2">
+            {competitors.map((c, i) => {
+              const content = (
+                <span className="bg-background rounded-full px-3 py-1.5 text-sm font-medium text-heading">
+                  {c.name}
+                </span>
+              );
+              return c.symbol ? (
+                <Link key={i} href={`/dashboard/stocks/${c.symbol}`}>
+                  {content}
+                </Link>
+              ) : (
+                <span key={i}>{content}</span>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-surface border border-line rounded-lg px-3.5 py-2.5">
+      <div className="text-xs text-foreground/50 mb-0.5">{label}</div>
+      <div className="text-sm font-semibold text-heading">{value}</div>
     </div>
   );
 }

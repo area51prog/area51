@@ -27,6 +27,78 @@ export interface Stock {
   history: { date: string; price: number }[];
 }
 
+export interface DepthLevel {
+  price: number;
+  quantity: number;
+}
+
+export interface FullQuote {
+  price: number;
+  prevClose: number;
+  high: number;
+  low: number;
+  open: number;
+  volume: number;
+  averagePrice: number;
+  netChange: number;
+  totalBuyQuantity: number;
+  totalSellQuantity: number;
+  upperCircuitLimit: number;
+  lowerCircuitLimit: number;
+  depth: { buy: DepthLevel[]; sell: DepthLevel[] };
+  timestamp: string;
+}
+
+export interface CandlePoint {
+  date: string;
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface CompanyProfile {
+  description: string;
+  sector: string;
+  sectorMarketCapInrCr: number;
+}
+
+export interface KeyRatio {
+  name: string;
+  companyValue: string;
+  sectorValue: string;
+}
+
+export interface ShareholdingSlice {
+  category: string;
+  percent: number;
+  period: string;
+}
+
+export interface CorporateAction {
+  name: string;
+  exDate: string | null;
+  amount: number | null;
+  details: string;
+}
+
+export interface Competitor {
+  symbol: string | null;
+  name: string;
+  sector: string;
+  marketCapInrCr: number;
+}
+
+export interface CompanyFundamentals {
+  profile: CompanyProfile | null;
+  keyRatios: KeyRatio[];
+  shareholding: ShareholdingSlice[];
+  corporateActions: CorporateAction[];
+  competitors: Competitor[];
+}
+
 export interface WatchlistEntry {
   symbol: string;
 }

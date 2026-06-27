@@ -70,6 +70,12 @@ export async function lookupInstrument(symbol: string): Promise<SearchableInstru
   return found ? { symbol: found.symbol, name: found.name, exchange: found.exchange } : null;
 }
 
+export async function lookupByInstrumentKey(instrumentKey: string): Promise<SearchableInstrument | null> {
+  const [nse, bse] = await Promise.all([loadExchange("NSE"), loadExchange("BSE")]);
+  const found = [...nse, ...bse].find((i) => i.instrumentKey === instrumentKey);
+  return found ? { symbol: found.symbol, name: found.name, exchange: found.exchange } : null;
+}
+
 // Used by quote providers to resolve trading symbols to Upstox instrument
 // keys without re-fetching the instrument master they already share here.
 export async function getInstrumentKeys(symbols: string[]): Promise<Map<string, string>> {
@@ -81,6 +87,20 @@ export async function getInstrumentKeys(symbols: string[]): Promise<Map<string, 
     if (wanted.has(inst.symbol) && !map.has(inst.symbol)) map.set(inst.symbol, inst.instrumentKey);
   }
   return map;
+}
+
+export async function getInstrumentKey(symbol: string): Promise<string | null> {
+  const map = await getInstrumentKeys([symbol]);
+  return map.get(symbol) ?? null;
+}
+
+// Equity instrument keys are formatted "<EXCHANGE>_EQ|<ISIN>" — the
+// fundamentals API is ISIN-keyed, so this just strips the exchange prefix.
+export async function getIsin(symbol: string): Promise<string | null> {
+  const key = await getInstrumentKey(symbol);
+  if (!key) return null;
+  const isin = key.split("|")[1];
+  return isin ?? null;
 }
 
 export async function searchInstruments(query: string, limit = 8): Promise<SearchableInstrument[]> {
