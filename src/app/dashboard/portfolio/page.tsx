@@ -129,7 +129,7 @@ export default function PortfolioPage() {
     .sort((a, b) => b.value - a.value);
 
   const switcherLists =
-    isPremium && lists.length > 1 ? [{ id: SUMMARY_ID, name: "Summary" }, ...lists] : lists;
+    isPremium && lists.length > 1 ? [{ id: SUMMARY_ID, name: "All Portfolios" }, ...lists] : lists;
 
   if (!ready) return null;
 

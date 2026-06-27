@@ -35,7 +35,6 @@ export interface Position {
 
 export const SUMMARY_ID = "ALL";
 
-const ACTIVE_KEY = "area51_active_portfolio";
 const LOT_COLUMNS = "id, portfolio_id, symbol, quantity, avg_price, buy_date, created_at";
 
 function toLot(row: {
@@ -109,13 +108,10 @@ export function usePortfolio() {
         const fetchedLists = data ?? [];
         setLists(fetchedLists);
 
-        const stored = typeof window !== "undefined" ? window.localStorage.getItem(ACTIVE_KEY) : null;
-        const storedIsValid = stored === SUMMARY_ID ? isPremium && fetchedLists.length > 1 : fetchedLists.some((l) => l.id === stored);
-        const activeId = storedIsValid
-          ? stored
-          : isPremium && fetchedLists.length > 1
-            ? SUMMARY_ID
-            : fetchedLists[0]?.id ?? null;
+        // Always land on "All Portfolios" for multi-portfolio Premium users on a fresh
+        // mount (e.g. after navigating away and back) — a specific-portfolio selection
+        // is a transient, in-session choice, not something we remember across visits.
+        const activeId = isPremium && fetchedLists.length > 1 ? SUMMARY_ID : fetchedLists[0]?.id ?? null;
         setActivePortfolioId(activeId);
 
         if (!activeId) {
@@ -161,7 +157,6 @@ export function usePortfolio() {
   async function switchPortfolio(portfolioId: string) {
     if (portfolioId === activePortfolioId) return;
     setActivePortfolioId(portfolioId);
-    if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_KEY, portfolioId);
     setReady(false);
     const portfolioIds = portfolioId === SUMMARY_ID ? lists.map((l) => l.id) : [portfolioId];
     await loadLots(portfolioIds);
