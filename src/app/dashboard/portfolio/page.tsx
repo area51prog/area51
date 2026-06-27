@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Upload } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getStock } from "@/lib/mock-data";
-import { usePortfolio, SUMMARY_ID, Position } from "@/lib/usePortfolio";
+import { usePortfolio, SUMMARY_ID, Position, NewHolding } from "@/lib/usePortfolio";
 import { useProfile } from "@/lib/useProfile";
 import { useQuotes } from "@/lib/useQuotes";
 import { withLiveQuote } from "@/lib/liveStock";
@@ -13,6 +13,7 @@ import { Exchange, Stock } from "@/lib/types";
 import { formatINR, formatINRCompact } from "@/lib/format";
 import { Card, ChangeBadge, LiveBadge, Stat } from "@/components/ui";
 import { ListSwitcher } from "@/components/ListSwitcher";
+import { parseCsv, validateBulkRows, bulkUploadTemplate, BulkRowError } from "@/lib/csv";
 
 const COLORS = ["#1a2348", "#4f46e5", "#7c83e8", "#a5abf2", "#c8ccf8", "#15803d"];
 
@@ -34,12 +35,14 @@ export default function PortfolioPage() {
     positions,
     ready,
     buyHolding,
+    bulkAddHoldings,
     sellHolding,
     deletePosition,
   } = usePortfolio();
   const { isPremium } = useProfile();
   const { quotes, sources } = useQuotes(positions.map((p) => p.symbol));
   const [adding, setAdding] = useState(false);
+  const [bulkUploading, setBulkUploading] = useState(false);
   const [editingSymbol, setEditingSymbol] = useState<string | null>(null);
   const [info, setInfo] = useState<Record<string, SymbolResult>>({});
   const fetchedInfoRef = useRef<Set<string>>(new Set());
@@ -50,6 +53,7 @@ export default function PortfolioPage() {
   if (activePortfolioId !== prevPortfolioId) {
     setPrevPortfolioId(activePortfolioId);
     setAdding(false);
+    setBulkUploading(false);
     setEditingSymbol(null);
   }
 
@@ -146,13 +150,22 @@ export default function PortfolioPage() {
           noun="portfolio"
         />
         {!isSummary && (
-          <button
-            type="button"
-            onClick={() => setAdding((a) => !a)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white text-sm font-semibold px-3.5 py-2 hover:bg-brand/90"
-          >
-            <Plus size={15} /> Add holding
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBulkUploading((a) => !a)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line text-sm font-semibold px-3.5 py-2 hover:bg-background"
+            >
+              <Upload size={15} /> Upload CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdding((a) => !a)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white text-sm font-semibold px-3.5 py-2 hover:bg-brand/90"
+            >
+              <Plus size={15} /> Add holding
+            </button>
+          </div>
         )}
       </div>
 
@@ -160,6 +173,13 @@ export default function PortfolioPage() {
         <AddHoldingForm
           onAdd={buyHolding}
           onDone={() => setAdding(false)}
+        />
+      )}
+
+      {bulkUploading && (
+        <BulkUploadForm
+          onUpload={bulkAddHoldings}
+          onDone={() => setBulkUploading(false)}
         />
       )}
 
@@ -448,6 +468,137 @@ function AddHoldingForm({
           </button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+function BulkUploadForm({
+  onUpload,
+  onDone,
+}: {
+  onUpload: (inputs: NewHolding[]) => Promise<{ inserted: number; error?: string }>;
+  onDone: () => void;
+}) {
+  const [fileName, setFileName] = useState("");
+  const [validRows, setValidRows] = useState<NewHolding[]>([]);
+  const [rowErrors, setRowErrors] = useState<BulkRowError[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ inserted: number; error?: string } | null>(null);
+
+  function handleDownloadTemplate() {
+    const blob = new Blob([bulkUploadTemplate()], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "holdings-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    setResult(null);
+    const text = await file.text();
+    const { valid, errors } = validateBulkRows(parseCsv(text));
+    setValidRows(valid);
+    setRowErrors(errors);
+  }
+
+  async function handleSubmit() {
+    if (validRows.length === 0) return;
+    setSubmitting(true);
+    const outcome = await onUpload(validRows);
+    setSubmitting(false);
+    setResult(outcome);
+    if (!outcome.error) {
+      setValidRows([]);
+      setRowErrors([]);
+      setFileName("");
+    }
+  }
+
+  return (
+    <Card title="Bulk upload holdings">
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex items-center gap-1.5 rounded-lg border border-line text-sm font-semibold px-3.5 py-2 hover:bg-background cursor-pointer">
+            <Upload size={15} /> Choose CSV file
+            <input type="file" accept=".csv,text/csv" onChange={handleFileChange} className="hidden" />
+          </label>
+          {fileName && <span className="text-sm text-foreground/60">{fileName}</span>}
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="text-sm font-semibold text-brand hover:underline"
+          >
+            Download template
+          </button>
+        </div>
+
+        {(validRows.length > 0 || rowErrors.length > 0) && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[600px]">
+              <thead>
+                <tr className="text-left text-xs text-foreground/40 uppercase tracking-wide border-b border-line">
+                  <th className="py-2 font-semibold">Row</th>
+                  <th className="py-2 font-semibold">Symbol</th>
+                  <th className="py-2 font-semibold text-right">Qty</th>
+                  <th className="py-2 font-semibold text-right">Avg. price</th>
+                  <th className="py-2 font-semibold">Buy date</th>
+                  <th className="py-2 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {validRows.map((r, i) => (
+                  <tr key={`valid-${i}`}>
+                    <td className="py-2">{i + 2}</td>
+                    <td className="py-2 font-medium">{r.symbol}</td>
+                    <td className="py-2 text-right">{r.quantity}</td>
+                    <td className="py-2 text-right">₹{formatINR(r.avgPrice)}</td>
+                    <td className="py-2">{r.buyDate}</td>
+                    <td className="py-2 text-up">✓ Ready</td>
+                  </tr>
+                ))}
+                {rowErrors.map((e, i) => (
+                  <tr key={`error-${i}`}>
+                    <td className="py-2">{e.row || "—"}</td>
+                    <td className="py-2" colSpan={4}>
+                      —
+                    </td>
+                    <td className="py-2 text-down">✗ {e.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {result && (
+          <p className={`text-sm ${result.error ? "text-down" : "text-up"}`}>
+            {result.error ? result.error : `Uploaded ${result.inserted} holding${result.inserted === 1 ? "" : "s"}.`}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting || validRows.length === 0}
+            className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 disabled:opacity-60"
+          >
+            {submitting ? "Uploading…" : `Upload ${validRows.length} holding${validRows.length === 1 ? "" : "s"}`}
+          </button>
+          <button
+            type="button"
+            onClick={onDone}
+            className="rounded-lg border border-line text-sm font-semibold px-4 py-2 hover:bg-background"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </Card>
   );
 }

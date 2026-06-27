@@ -214,17 +214,32 @@ export function usePortfolio() {
     txnDate: string;
     realizedPnl: number | null;
   }) {
-    if (!user || !activePortfolioId || activePortfolioId === SUMMARY_ID) return;
-    await supabase.from("transactions").insert({
-      user_id: user.id,
-      portfolio_id: activePortfolioId,
-      symbol: input.symbol,
-      side: input.side,
-      quantity: input.quantity,
-      price: input.price,
-      txn_date: input.txnDate,
-      realized_pnl: input.realizedPnl,
-    });
+    await logTransactions([input]);
+  }
+
+  async function logTransactions(
+    inputs: {
+      symbol: string;
+      side: "buy" | "sell";
+      quantity: number;
+      price: number;
+      txnDate: string;
+      realizedPnl: number | null;
+    }[]
+  ) {
+    if (!user || !activePortfolioId || activePortfolioId === SUMMARY_ID || inputs.length === 0) return;
+    await supabase.from("transactions").insert(
+      inputs.map((input) => ({
+        user_id: user.id,
+        portfolio_id: activePortfolioId,
+        symbol: input.symbol,
+        side: input.side,
+        quantity: input.quantity,
+        price: input.price,
+        txn_date: input.txnDate,
+        realized_pnl: input.realizedPnl,
+      }))
+    );
   }
 
   async function buyHolding(input: NewHolding): Promise<{ error?: string }> {
@@ -255,6 +270,40 @@ export function usePortfolio() {
       realizedPnl: null,
     });
     return {};
+  }
+
+  async function bulkAddHoldings(inputs: NewHolding[]): Promise<{ inserted: number; error?: string }> {
+    if (!user || !activePortfolioId || activePortfolioId === SUMMARY_ID) return { inserted: 0, error: "Select a single portfolio first" };
+    if (inputs.length === 0) return { inserted: 0 };
+
+    const { data, error } = await supabase
+      .from("portfolio_holdings")
+      .insert(
+        inputs.map((input) => ({
+          user_id: user.id,
+          portfolio_id: activePortfolioId,
+          symbol: input.symbol,
+          quantity: input.quantity,
+          avg_price: input.avgPrice,
+          buy_date: input.buyDate,
+        }))
+      )
+      .select(LOT_COLUMNS);
+
+    if (error || !data) return { inserted: 0, error: error?.message ?? "Failed to add holdings" };
+
+    setLots((prev) => [...data.map(toLot), ...prev]);
+    await logTransactions(
+      inputs.map((input) => ({
+        symbol: input.symbol,
+        side: "buy" as const,
+        quantity: input.quantity,
+        price: input.avgPrice,
+        txnDate: input.buyDate,
+        realizedPnl: null,
+      }))
+    );
+    return { inserted: data.length };
   }
 
   async function sellHolding(symbol: string, quantity: number, price: number, sellDate: string): Promise<{ error?: string }> {
@@ -345,6 +394,7 @@ export function usePortfolio() {
     positions,
     ready,
     buyHolding,
+    bulkAddHoldings,
     sellHolding,
     deletePosition,
   };
