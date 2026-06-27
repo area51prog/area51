@@ -11,6 +11,7 @@ import { useAllGeneratedReports } from "@/lib/useResearch";
 import { withLiveQuote } from "@/lib/liveStock";
 import { formatDate, formatINRCompact } from "@/lib/format";
 import { Card, ChangeBadge, ChartMode, ChartModeToggle, LiveBadge, PriceAreaChart, RangeSelector, RatingPill } from "@/components/ui";
+import PremiumGate from "@/components/PremiumGate";
 import { Exchange, Stock } from "@/lib/types";
 import { ArrowUpRight, Wallet, FileSearch } from "lucide-react";
 
@@ -211,40 +212,42 @@ export default function OverviewPage() {
             </>
           )}
         </Card>
-        <Card title="Run equity research" className="flex flex-col">
-          <p className="text-sm text-foreground/60">
-            Get an AI-generated equity research report — rating, target price, scenarios and risks — for any stock in seconds.
-          </p>
+        <PremiumGate feature="Research">
+          <Card title="Run equity research" className="flex flex-col">
+            <p className="text-sm text-foreground/60">
+              Get an AI-generated equity research report — rating, target price, scenarios and risks — for any stock in seconds.
+            </p>
 
-          {recentResearch.length > 0 && (
-            <div className="mt-3 flex-1 divide-y divide-line">
-              {recentResearch.map(({ symbol, report }) => (
-                <Link
-                  key={symbol}
-                  href={`/dashboard/research/${symbol}`}
-                  className="flex items-center justify-between py-2.5 hover:bg-background/60 rounded-lg px-2 -mx-2"
-                >
-                  <div>
-                    <div className="text-sm font-semibold text-heading">{symbol}</div>
-                    <div className="text-xs text-foreground/50">{formatDate(report.generatedOn)}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-heading">₹{report.targetPrice.toLocaleString("en-IN")}</span>
-                    <RatingPill rating={report.rating} />
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
+            {recentResearch.length > 0 && (
+              <div className="mt-3 flex-1 divide-y divide-line">
+                {recentResearch.map(({ symbol, report }) => (
+                  <Link
+                    key={symbol}
+                    href={`/dashboard/research/${symbol}`}
+                    className="flex items-center justify-between py-2.5 hover:bg-background/60 rounded-lg px-2 -mx-2"
+                  >
+                    <div>
+                      <div className="text-sm font-semibold text-heading">{symbol}</div>
+                      <div className="text-xs text-foreground/50">{formatDate(report.generatedOn)}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-heading">₹{report.targetPrice.toLocaleString("en-IN")}</span>
+                      <RatingPill rating={report.rating} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
 
-          <Link
-            href="/dashboard/research"
-            className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-brand text-white text-sm font-semibold py-2.5 hover:bg-brand/90 transition-colors"
-          >
-            <FileSearch size={16} />
-            Go to Research
-          </Link>
-        </Card>
+            <Link
+              href="/dashboard/research"
+              className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-brand text-white text-sm font-semibold py-2.5 hover:bg-brand/90 transition-colors"
+            >
+              <FileSearch size={16} />
+              Go to Research
+            </Link>
+          </Card>
+        </PremiumGate>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
