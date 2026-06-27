@@ -1,49 +1,14 @@
-import zlib from "zlib";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { getValidUpstoxAccessToken } from "@/lib/upstoxToken";
+import { getInstrumentKeys } from "@/lib/providers/instruments";
 import { Database } from "@/lib/supabase/database.types";
 import { LiveQuote } from "@/lib/types";
-
-const INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz";
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-
-interface UpstoxInstrument {
-  instrument_key: string;
-  trading_symbol: string;
-  segment: string;
-  instrument_type: string;
-}
 
 interface OhlcEntry {
   last_price: number;
   instrument_token: string;
   prev_ohlc: { open: number; high: number; low: number; close: number } | null;
   live_ohlc: { open: number; high: number; low: number; close: number };
-}
-
-let instrumentCache: { map: Map<string, string>; fetchedAt: number } | null = null;
-
-async function loadInstrumentMap(): Promise<Map<string, string>> {
-  if (instrumentCache && Date.now() - instrumentCache.fetchedAt < CACHE_TTL_MS) {
-    return instrumentCache.map;
-  }
-
-  const res = await fetch(INSTRUMENTS_URL, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to fetch Upstox instrument master: ${res.status}`);
-
-  const buf = Buffer.from(await res.arrayBuffer());
-  const json = zlib.gunzipSync(buf).toString("utf-8");
-  const instruments: UpstoxInstrument[] = JSON.parse(json);
-
-  const map = new Map<string, string>();
-  for (const inst of instruments) {
-    if (inst.segment === "NSE_EQ" && inst.instrument_type === "EQ") {
-      map.set(inst.trading_symbol, inst.instrument_key);
-    }
-  }
-
-  instrumentCache = { map, fetchedAt: Date.now() };
-  return map;
 }
 
 export async function getUpstoxQuotes(
@@ -55,7 +20,7 @@ export async function getUpstoxQuotes(
 
   let instrumentMap: Map<string, string>;
   try {
-    instrumentMap = await loadInstrumentMap();
+    instrumentMap = await getInstrumentKeys(symbols);
   } catch {
     return {};
   }

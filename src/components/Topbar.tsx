@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bell,
   Search,
@@ -18,9 +18,14 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { useProfile } from "@/lib/useProfile";
-import { STOCKS } from "@/lib/mock-data";
 import { useNotifications, AppNotification } from "@/lib/useNotifications";
 import Link from "next/link";
+
+interface SymbolResult {
+  symbol: string;
+  name: string;
+  exchange: "NSE" | "BSE";
+}
 
 const NOTIFICATION_ICONS: Record<AppNotification["category"], typeof Bell> = {
   account: ShieldCheck,
@@ -48,17 +53,36 @@ export default function Topbar({ title }: { title: string }) {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SymbolResult[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const results =
-    query.trim().length > 0
-      ? STOCKS.filter(
-          (s) =>
-            s.symbol.toLowerCase().includes(query.toLowerCase()) ||
-            s.name.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 6)
-      : [];
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing results when the query is emptied
+      setResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        const res = await fetch(`/api/symbols/search?q=${encodeURIComponent(q)}`, {
+          signal: controller.signal,
+        });
+        const body = await res.json();
+        setResults(body.ok ? body.results : []);
+      } catch {
+        // Aborted or network error — leave the previous results in place.
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [query]);
 
   return (
     <header className="h-16 flex-none border-b border-line bg-surface flex items-center gap-4 px-4 sm:px-6">
@@ -76,7 +100,7 @@ export default function Topbar({ title }: { title: string }) {
           <div className="absolute top-full mt-1 left-0 w-full bg-surface border border-line rounded-lg shadow-lg z-30 overflow-hidden">
             {results.map((s) => (
               <Link
-                key={s.symbol}
+                key={`${s.exchange}:${s.symbol}`}
                 href={`/dashboard/stocks/${s.symbol}`}
                 onClick={() => setQuery("")}
                 className="flex items-center justify-between px-3.5 py-2.5 text-sm hover:bg-background"
@@ -85,7 +109,7 @@ export default function Topbar({ title }: { title: string }) {
                   <span className="font-semibold text-heading">{s.symbol}</span>{" "}
                   <span className="text-foreground/50">{s.name}</span>
                 </span>
-                <span className="text-foreground/60">₹{s.price.toFixed(2)}</span>
+                <span className="text-foreground/40 text-xs">{s.exchange}</span>
               </Link>
             ))}
           </div>
