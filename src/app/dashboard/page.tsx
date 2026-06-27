@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { usePortfolio } from "@/lib/usePortfolio";
@@ -11,9 +11,16 @@ import { useAllGeneratedReports } from "@/lib/useResearch";
 import { withLiveQuote } from "@/lib/liveStock";
 import { formatDate, formatINRCompact } from "@/lib/format";
 import { Card, ChangeBadge, LiveBadge, PriceAreaChart, RatingPill } from "@/components/ui";
+import { Exchange, Stock } from "@/lib/types";
 import { ArrowUpRight, Wallet, FileSearch } from "lucide-react";
 
 const PORTFOLIO_RANGES: PortfolioRange[] = ["1D", "1W", "1M", "1Y", "5Y"];
+
+interface SymbolResult {
+  symbol: string;
+  name: string;
+  exchange: Exchange;
+}
 
 export default function OverviewPage() {
   const { user } = useAuth();
@@ -22,15 +29,71 @@ export default function OverviewPage() {
   const { symbols: watchlistSymbols, ready: watchlistReady } = useWatchlist();
   const { quotes, sources } = useQuotes(positions.map((p) => p.symbol));
   const generatedReports = useAllGeneratedReports();
+  const [info, setInfo] = useState<Record<string, SymbolResult>>({});
+  const fetchedInfoRef = useRef<Set<string>>(new Set());
+
+  // Holdings in stocks beyond the small built-in mock set need their name/exchange
+  // looked up from the live NSE/BSE instrument master (mirrors the portfolio page).
+  const unresolved = positions.map((p) => p.symbol).filter((s) => !getStock(s) && !info[s]);
+  useEffect(() => {
+    const toFetch = unresolved.filter((s) => !fetchedInfoRef.current.has(s));
+    if (toFetch.length === 0) return;
+    toFetch.forEach((s) => fetchedInfoRef.current.add(s));
+
+    let cancelled = false;
+    Promise.all(
+      toFetch.map((s) =>
+        fetch(`/api/symbols/lookup?symbol=${encodeURIComponent(s)}`)
+          .then((res) => res.json())
+          .then((body) => ({ symbol: s, instrument: body.ok ? body.instrument : null }))
+          .catch(() => ({ symbol: s, instrument: null }))
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      setInfo((prev) => {
+        const next = { ...prev };
+        for (const { symbol, instrument } of results) {
+          if (instrument) next[symbol] = instrument;
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `unresolved` is derived fresh each render from `positions`/`info`
+  }, [unresolved.join(",")]);
 
   const rows = positions
     .map((p) => {
-      const baseStock = getStock(p.symbol);
+      const mock = getStock(p.symbol);
+      const resolved = info[p.symbol];
+      const baseStock: Stock | null = mock
+        ? mock
+        : resolved
+          ? {
+              symbol: p.symbol,
+              name: resolved.name,
+              exchange: resolved.exchange,
+              sector: "—",
+              price: 0,
+              prevClose: 0,
+              dayHigh: 0,
+              dayLow: 0,
+              week52High: 0,
+              week52Low: 0,
+              marketCapCr: 0,
+              peRatio: null,
+              history: [],
+            }
+          : null;
       if (!baseStock) return null;
       const s = withLiveQuote(baseStock, quotes[p.symbol]);
+      const priceKnown = s.price > 0;
       const invested = p.avgPrice * p.quantity;
-      const value = s.price * p.quantity;
-      const dayChange = (s.price - s.prevClose) * p.quantity;
+      const value = (priceKnown ? s.price : p.avgPrice) * p.quantity;
+      const dayChange = priceKnown ? (s.price - s.prevClose) * p.quantity : 0;
       return { p, s, invested, value, dayChange };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
