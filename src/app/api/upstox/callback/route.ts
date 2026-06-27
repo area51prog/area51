@@ -1,15 +1,20 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { saveUpstoxToken } from "@/lib/upstoxToken";
 import { createClient } from "@/lib/supabase/server";
+import { UPSTOX_OAUTH_STATE_COOKIE } from "@/app/api/upstox/login/route";
 
 export async function GET(req: NextRequest) {
   const settingsUrl = new URL("/dashboard/settings", req.url);
   const code = req.nextUrl.searchParams.get("code");
   const errorParam = req.nextUrl.searchParams.get("error");
+  const state = req.nextUrl.searchParams.get("state");
+  const expectedState = req.cookies.get(UPSTOX_OAUTH_STATE_COOKIE)?.value;
 
-  if (errorParam || !code) {
+  if (errorParam || !code || !state || !expectedState || state !== expectedState) {
     settingsUrl.searchParams.set("upstox", "error");
-    return Response.redirect(settingsUrl.toString());
+    const res = NextResponse.redirect(settingsUrl.toString());
+    res.cookies.delete(UPSTOX_OAUTH_STATE_COOKIE);
+    return res;
   }
 
   const clientId = process.env.UPSTOX_CLIENT_ID;
@@ -18,11 +23,13 @@ export async function GET(req: NextRequest) {
 
   if (!clientId || !clientSecret || !redirectUri) {
     settingsUrl.searchParams.set("upstox", "not_configured");
-    return Response.redirect(settingsUrl.toString());
+    const res = NextResponse.redirect(settingsUrl.toString());
+    res.cookies.delete(UPSTOX_OAUTH_STATE_COOKIE);
+    return res;
   }
 
   try {
-    const res = await fetch("https://api.upstox.com/v2/login/authorization/token", {
+    const tokenRes = await fetch("https://api.upstox.com/v2/login/authorization/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: new URLSearchParams({
@@ -34,23 +41,31 @@ export async function GET(req: NextRequest) {
       }),
     });
 
-    const data = await res.json();
+    const data = await tokenRes.json();
 
-    if (!res.ok || !data.access_token) {
+    if (!tokenRes.ok || !data.access_token) {
       settingsUrl.searchParams.set("upstox", "error");
-      return Response.redirect(settingsUrl.toString());
+      const res = NextResponse.redirect(settingsUrl.toString());
+      res.cookies.delete(UPSTOX_OAUTH_STATE_COOKIE);
+      return res;
     }
 
     const supabase = await createClient();
     const saved = await saveUpstoxToken(supabase, data.access_token);
     if (!saved) {
       settingsUrl.searchParams.set("upstox", "error");
-      return Response.redirect(settingsUrl.toString());
+      const res = NextResponse.redirect(settingsUrl.toString());
+      res.cookies.delete(UPSTOX_OAUTH_STATE_COOKIE);
+      return res;
     }
     settingsUrl.searchParams.set("upstox", "connected");
-    return Response.redirect(settingsUrl.toString());
+    const res = NextResponse.redirect(settingsUrl.toString());
+    res.cookies.delete(UPSTOX_OAUTH_STATE_COOKIE);
+    return res;
   } catch {
     settingsUrl.searchParams.set("upstox", "error");
-    return Response.redirect(settingsUrl.toString());
+    const res = NextResponse.redirect(settingsUrl.toString());
+    res.cookies.delete(UPSTOX_OAUTH_STATE_COOKIE);
+    return res;
   }
 }

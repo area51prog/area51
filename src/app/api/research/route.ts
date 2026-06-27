@@ -133,6 +133,10 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
 
+  if (!userData.user) {
+    return Response.json({ ok: false, error: "Authentication required" }, { status: 401 });
+  }
+
   if (!force) {
     const { data: cached } = await supabase
       .from("research_reports")

@@ -89,7 +89,7 @@ export function validateBulkRows(rows: string[][]): { valid: NewHolding[]; error
       errors.push({ row: rowNum, message: "Avg. price must be a non-negative number." });
       continue;
     }
-    if (!buyDate || Number.isNaN(new Date(buyDate).getTime())) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(buyDate) || Number.isNaN(new Date(buyDate).getTime())) {
       errors.push({ row: rowNum, message: "Buy date is invalid. Use YYYY-MM-DD." });
       continue;
     }
