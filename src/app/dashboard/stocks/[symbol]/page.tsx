@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Star, FileSearch } from "lucide-react";
-import { getStock } from "@/lib/mock-data";
+import { getStock, getPortfolioHistory, PortfolioRange } from "@/lib/mock-data";
 import { useWatchlist } from "@/lib/useWatchlist";
 import { usePortfolio } from "@/lib/usePortfolio";
 import { useQuotes, LiveQuote, QuoteSource } from "@/lib/useQuotes";
@@ -19,6 +19,8 @@ interface InstrumentInfo {
   name: string;
   exchange: Exchange;
 }
+
+const TREND_RANGES: PortfolioRange[] = ["1D", "1W", "1M", "1Y", "5Y"];
 
 export default function StockDetailPage() {
   const params = useParams<{ symbol: string }>();
@@ -48,12 +50,32 @@ export default function StockDetailPage() {
     };
   }, [symbol, baseStock]);
 
+  const [trendRange, setTrendRange] = useState<PortfolioRange>("1Y");
+
   const { symbols, toggle } = useWatchlist();
   const { positions } = usePortfolio();
   const liveOnlySymbol = !baseStock && instrument ? instrument.symbol : undefined;
   const { quotes, sources, loading } = useQuotes(
     baseStock ? [baseStock.symbol] : liveOnlySymbol ? [liveOnlySymbol] : []
   );
+
+  const [apiConnected, setApiConnected] = useState(true);
+
+  useEffect(() => {
+    if (baseStock) return;
+    let cancelled = false;
+    fetch("/api/upstox/status")
+      .then((res) => res.json())
+      .then((body) => {
+        if (!cancelled) setApiConnected(Boolean(body.upstoxConnected));
+      })
+      .catch(() => {
+        if (!cancelled) setApiConnected(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [baseStock]);
 
   if (!baseStock) {
     if (instrument === undefined) return null;
@@ -64,6 +86,7 @@ export default function StockDetailPage() {
         quote={quotes[instrument.symbol]}
         source={sources[instrument.symbol]}
         loading={loading}
+        apiConnected={apiConnected}
         inWatchlist={symbols.includes(instrument.symbol)}
         onToggleWatchlist={() => toggle(instrument.symbol)}
       />
@@ -77,6 +100,7 @@ export default function StockDetailPage() {
   const change = stock.price - stock.prevClose;
   const inWatchlist = symbols.includes(stock.symbol);
   const holding = positions.find((p) => p.symbol === stock.symbol);
+  const trendHistory = getPortfolioHistory(stock.price, trendRange);
 
   return (
     <div className="space-y-5">
@@ -113,8 +137,26 @@ export default function StockDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card title={`${stock.symbol} — 12 month trend`} className="lg:col-span-2">
-          <PriceAreaChart data={stock.history} color={pct >= 0 ? "#15803d" : "#dc2626"} height={280} />
+        <Card
+          title={`${stock.symbol} — Trend`}
+          className="lg:col-span-2"
+          action={
+            <div className="flex items-center gap-1 rounded-lg bg-background/60 p-0.5">
+              {TREND_RANGES.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setTrendRange(r)}
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                    trendRange === r ? "bg-brand text-white" : "text-foreground/50 hover:text-foreground"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <PriceAreaChart data={trendHistory} color={pct >= 0 ? "#15803d" : "#dc2626"} height={280} />
         </Card>
         <Card title="Key stats">
           <dl className="space-y-3 text-sm">
@@ -151,6 +193,7 @@ function LiveOnlyStockView({
   quote,
   source,
   loading,
+  apiConnected,
   inWatchlist,
   onToggleWatchlist,
 }: {
@@ -158,6 +201,7 @@ function LiveOnlyStockView({
   quote?: LiveQuote;
   source?: QuoteSource;
   loading: boolean;
+  apiConnected: boolean;
   inWatchlist: boolean;
   onToggleWatchlist: () => void;
 }) {
@@ -182,10 +226,18 @@ function LiveOnlyStockView({
                 <ChangeBadge value={change} percent={pct} />
                 {!loading && <LiveBadge source={source} />}
               </>
-            ) : (
+            ) : loading ? (
+              <span className="text-sm text-foreground/50">Loading price…</span>
+            ) : !apiConnected ? (
               <span className="text-sm text-foreground/50">
-                {loading ? "Loading price…" : "No live quote available for this symbol."}
+                API not connected.{" "}
+                <Link href="/dashboard/settings" className="text-brand font-medium hover:underline">
+                  Connect it in Settings
+                </Link>{" "}
+                to see live prices for this symbol.
               </span>
+            ) : (
+              <span className="text-sm text-foreground/50">No live quote available for this symbol.</span>
             )}
           </div>
         </div>
