@@ -162,6 +162,28 @@ export function RangeSelector<T extends string>({
   );
 }
 
+export function Stat({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "up" | "down";
+}) {
+  return (
+    <div className="px-4 first:pl-0 flex flex-col justify-center">
+      <div className="text-xs font-semibold text-foreground/50 uppercase tracking-wide">{label}</div>
+      <div className={`text-2xl font-bold mt-1.5 ${tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-heading"}`}>
+        {value}
+      </div>
+      {sub && <div className="text-xs text-foreground/50 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
 export function ChartModeToggle({ mode, onChange }: { mode: ChartMode; onChange: (mode: ChartMode) => void }) {
   return (
     <div className="flex items-center gap-1 rounded-lg bg-background/60 p-0.5">

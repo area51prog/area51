@@ -11,7 +11,7 @@ import { useQuotes } from "@/lib/useQuotes";
 import { withLiveQuote } from "@/lib/liveStock";
 import { Exchange, Stock } from "@/lib/types";
 import { formatINR, formatINRCompact } from "@/lib/format";
-import { Card, ChangeBadge, LiveBadge } from "@/components/ui";
+import { Card, ChangeBadge, LiveBadge, Stat } from "@/components/ui";
 import { ListSwitcher } from "@/components/ListSwitcher";
 
 const COLORS = ["#1a2348", "#4f46e5", "#7c83e8", "#a5abf2", "#c8ccf8", "#15803d"];
@@ -576,27 +576,5 @@ function BuySellForm({
         </div>
       </form>
     </Card>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "up" | "down";
-}) {
-  return (
-    <div className="px-4 first:pl-0 flex flex-col justify-center">
-      <div className="text-xs font-semibold text-foreground/50 uppercase tracking-wide">{label}</div>
-      <div className={`text-2xl font-bold mt-1.5 ${tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-heading"}`}>
-        {value}
-      </div>
-      {sub && <div className="text-xs text-foreground/50 mt-0.5">{sub}</div>}
-    </div>
   );
 }
