@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, Trash2, Pencil, Upload, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Plus, Trash2, Upload, ArrowUp, ArrowDown, ArrowUpDown, ChevronRight } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getStock } from "@/lib/mock-data";
 import { usePortfolio, SUMMARY_ID, Position, NewHolding } from "@/lib/usePortfolio";
 import { useProfile } from "@/lib/useProfile";
 import { useQuotes } from "@/lib/useQuotes";
+import { useTransactions, Transaction } from "@/lib/useTransactions";
 import { withLiveQuote } from "@/lib/liveStock";
 import { Exchange, Stock } from "@/lib/types";
-import { formatINR, formatINRCompact } from "@/lib/format";
+import { formatINR, formatINRCompact, formatDate } from "@/lib/format";
 import { Card, ChangeBadge, LiveBadge, Stat } from "@/components/ui";
 import { ListSwitcher } from "@/components/ListSwitcher";
 import { parseCsv, validateBulkRows, bulkUploadTemplate, BulkRowError } from "@/lib/csv";
@@ -53,22 +54,37 @@ export default function PortfolioPage() {
   } = usePortfolio();
   const { isPremium } = useProfile();
   const { quotes, sources } = useQuotes(positions.map((p) => p.symbol));
+  const { transactions } = useTransactions();
   const [adding, setAdding] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
-  const [editingSymbol, setEditingSymbol] = useState<string | null>(null);
+  const [buySellIntent, setBuySellIntent] = useState<{ symbol: string; side: "buy" | "sell" } | null>(null);
+  const [expandedSymbols, setExpandedSymbols] = useState<Set<string>>(new Set());
   const [info, setInfo] = useState<Record<string, SymbolResult>>({});
   const fetchedInfoRef = useRef<Set<string>>(new Set());
-  const [sortKey, setSortKey] = useState<SortKey>("value");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState<SortKey>(isSummary ? "value" : "symbol");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(isSummary ? "desc" : "asc");
 
-  // Close any open Add / Buy-Sell form when the selected portfolio changes (incl. switching
-  // to/from Summary) — those forms act on a specific portfolio and shouldn't linger.
+  function toggleExpand(symbol: string) {
+    setExpandedSymbols((prev) => {
+      const next = new Set(prev);
+      if (next.has(symbol)) next.delete(symbol);
+      else next.add(symbol);
+      return next;
+    });
+  }
+
+  // Close any open Add / Buy-Sell form and reset row expansion/sort defaults when the selected
+  // portfolio changes (incl. switching to/from Summary) — those forms act on a specific
+  // portfolio and shouldn't linger, and individual portfolios default to sorting by Stock A-Z.
   const [prevPortfolioId, setPrevPortfolioId] = useState(activePortfolioId);
   if (activePortfolioId !== prevPortfolioId) {
     setPrevPortfolioId(activePortfolioId);
     setAdding(false);
     setBulkUploading(false);
-    setEditingSymbol(null);
+    setBuySellIntent(null);
+    setExpandedSymbols(new Set());
+    setSortKey(isSummary ? "value" : "symbol");
+    setSortDir(isSummary ? "desc" : "asc");
   }
 
   // Holdings in stocks beyond the small built-in mock set need their name/exchange
@@ -309,6 +325,7 @@ export default function PortfolioPage() {
               <table className="w-full text-sm min-w-[800px]">
                 <thead>
                   <tr className="text-left text-xs text-foreground/40 uppercase tracking-wide border-b border-line">
+                    {!isSummary && <th className="py-2 w-6"></th>}
                     {SORT_COLUMNS.map((col, i) => (
                       <th key={col.key} className={`py-2 font-semibold ${i === 0 ? "" : "text-right"}`}>
                         <button
@@ -333,46 +350,77 @@ export default function PortfolioPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {sortedRows.map((r) => (
-                    <tr key={r.p.symbol} className="group">
-                      <td className="py-3">
-                        <Link href={`/dashboard/stocks/${r.p.symbol}`} className="font-semibold text-heading hover:text-brand">
-                          {r.p.symbol}
-                        </Link>
-                        <div className="text-xs text-foreground/50">{r.s?.name ?? "Unknown stock"}</div>
-                      </td>
-                      <td className="py-3 text-right">{r.p.quantity}</td>
-                      <td className="py-3 text-right">₹{formatINR(r.p.avgPrice)}</td>
-                      <td className="py-3 text-right">{r.priceKnown ? `₹${formatINR(r.s!.price)}` : "—"}</td>
-                      <td className="py-3 text-right">{r.priceKnown && <ChangeBadge percent={r.dayChangePct} />}</td>
-                      <td className="py-3 text-right font-medium">{formatINRCompact(r.value)}</td>
-                      <td className={`py-3 text-right font-semibold ${r.gain >= 0 ? "text-up" : "text-down"}`}>
-                        {r.gain >= 0 ? "+" : ""}
-                        {formatINRCompact(r.gain)}
-                        <span className="block text-xs font-normal">{r.gainPct.toFixed(2)}%</span>
-                      </td>
-                      {!isSummary && (
-                        <td className="py-3 text-right">
-                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => setEditingSymbol(r.p.symbol)}
-                              className="text-foreground/40 hover:text-brand"
-                              title="Buy / Sell"
-                            >
-                              <Pencil size={15} />
-                            </button>
-                            <button
-                              onClick={() => deletePosition(r.p.symbol)}
-                              className="text-foreground/40 hover:text-down"
-                              title="Delete holding"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
+                  {sortedRows.map((r) => {
+                    const expanded = expandedSymbols.has(r.p.symbol);
+                    return (
+                      <Fragment key={r.p.symbol}>
+                        <tr className="group">
+                          {!isSummary && (
+                            <td className="py-3">
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(r.p.symbol)}
+                                className="text-foreground/40 hover:text-foreground/70"
+                                title={expanded ? "Hide transaction history" : "Show transaction history"}
+                              >
+                                <ChevronRight size={16} className={`transition-transform ${expanded ? "rotate-90" : ""}`} />
+                              </button>
+                            </td>
+                          )}
+                          <td className="py-3">
+                            <Link href={`/dashboard/stocks/${r.p.symbol}`} className="font-semibold text-heading hover:text-brand">
+                              {r.p.symbol}
+                            </Link>
+                            <div className="text-xs text-foreground/50">{r.s?.name ?? "Unknown stock"}</div>
+                          </td>
+                          <td className="py-3 text-right">{r.p.quantity}</td>
+                          <td className="py-3 text-right">₹{formatINR(r.p.avgPrice)}</td>
+                          <td className="py-3 text-right">{r.priceKnown ? `₹${formatINR(r.s!.price)}` : "—"}</td>
+                          <td className="py-3 text-right">{r.priceKnown && <ChangeBadge percent={r.dayChangePct} />}</td>
+                          <td className="py-3 text-right font-medium">{formatINRCompact(r.value)}</td>
+                          <td className={`py-3 text-right font-semibold ${r.gain >= 0 ? "text-up" : "text-down"}`}>
+                            {r.gain >= 0 ? "+" : ""}
+                            {formatINRCompact(r.gain)}
+                            <span className="block text-xs font-normal">{r.gainPct.toFixed(2)}%</span>
+                          </td>
+                          {!isSummary && (
+                            <td className="py-3 text-right">
+                              <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => deletePosition(r.p.symbol)}
+                                  className="text-foreground/40 hover:text-down"
+                                  title="Delete holding"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                        {!isSummary && (
+                          <tr>
+                            <td colSpan={SORT_COLUMNS.length + 2} className="p-0">
+                              <div
+                                className={`overflow-hidden transition-all duration-200 ease-in-out ${
+                                  expanded ? "max-h-[640px] opacity-100" : "max-h-0 opacity-0"
+                                }`}
+                              >
+                                <HoldingTransactionPanel
+                                  symbol={r.p.symbol}
+                                  currentPrice={r.priceKnown ? r.s!.price : null}
+                                  transactions={transactions.filter(
+                                    (t) => t.portfolioId === activePortfolioId && t.symbol === r.p.symbol
+                                  )}
+                                  onBuy={() => setBuySellIntent({ symbol: r.p.symbol, side: "buy" })}
+                                  onSell={() => setBuySellIntent({ symbol: r.p.symbol, side: "sell" })}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -380,15 +428,101 @@ export default function PortfolioPage() {
         </>
       )}
 
-      {editingSymbol && (
+      {buySellIntent && (
         <BuySellForm
-          symbol={editingSymbol}
-          position={positions.find((p) => p.symbol === editingSymbol) ?? null}
+          symbol={buySellIntent.symbol}
+          initialSide={buySellIntent.side}
+          position={positions.find((p) => p.symbol === buySellIntent.symbol) ?? null}
           onBuy={buyHolding}
           onSell={sellHolding}
-          onDone={() => setEditingSymbol(null)}
+          onDone={() => setBuySellIntent(null)}
         />
       )}
+    </div>
+  );
+}
+
+function HoldingTransactionPanel({
+  symbol,
+  currentPrice,
+  transactions,
+  onBuy,
+  onSell,
+}: {
+  symbol: string;
+  currentPrice: number | null;
+  transactions: Transaction[];
+  onBuy: () => void;
+  onSell: () => void;
+}) {
+  const sorted = [...transactions].sort((a, b) => b.txnDate.localeCompare(a.txnDate));
+
+  return (
+    <div className="p-4 bg-background/40 space-y-3">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs min-w-[760px]">
+          <thead>
+            <tr className="text-left text-foreground/40 uppercase tracking-wide border-b border-line">
+              <th className="py-1.5 pr-3 font-semibold">Stock</th>
+              <th className="py-1.5 pr-3 font-semibold text-right">Quantity</th>
+              <th className="py-1.5 pr-3 font-semibold">Trade date</th>
+              <th className="py-1.5 pr-3 font-semibold text-right">Trade price</th>
+              <th className="py-1.5 pr-3 font-semibold text-right">Trade amount</th>
+              <th className="py-1.5 pr-3 font-semibold text-right">Overall gain</th>
+              <th className="py-1.5 font-semibold text-right">Overall gain (%)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {sorted.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-3 text-center text-foreground/40">
+                  No transactions recorded yet.
+                </td>
+              </tr>
+            ) : (
+              sorted.map((t) => {
+                const amount = t.quantity * t.price;
+                const gain = t.side === "sell" ? t.realizedPnl : currentPrice !== null ? (currentPrice - t.price) * t.quantity : null;
+                const gainPct = gain !== null && amount ? (gain / amount) * 100 : null;
+                return (
+                  <tr key={t.id}>
+                    <td className="py-2 pr-3 font-semibold text-heading">{symbol}</td>
+                    <td className="py-2 pr-3 text-right">
+                      {t.side === "sell" ? "-" : ""}
+                      {t.quantity}
+                    </td>
+                    <td className="py-2 pr-3">{formatDate(t.txnDate)}</td>
+                    <td className="py-2 pr-3 text-right">₹{formatINR(t.price)}</td>
+                    <td className="py-2 pr-3 text-right">{formatINRCompact(amount)}</td>
+                    <td className={`py-2 pr-3 text-right font-medium ${gain === null ? "text-foreground/40" : gain >= 0 ? "text-up" : "text-down"}`}>
+                      {gain === null ? "—" : `${gain >= 0 ? "+" : ""}${formatINRCompact(gain)}`}
+                    </td>
+                    <td className={`py-2 text-right font-medium ${gainPct === null ? "text-foreground/40" : gainPct >= 0 ? "text-up" : "text-down"}`}>
+                      {gainPct === null ? "—" : `${gainPct >= 0 ? "+" : ""}${gainPct.toFixed(2)}%`}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onBuy}
+          className="rounded-lg bg-up text-white text-sm font-semibold px-4 py-2 hover:bg-up/90"
+        >
+          Buy
+        </button>
+        <button
+          type="button"
+          onClick={onSell}
+          className="rounded-lg bg-down text-white text-sm font-semibold px-4 py-2 hover:bg-down/90"
+        >
+          Sell
+        </button>
+      </div>
     </div>
   );
 }
@@ -754,17 +888,19 @@ function BulkUploadForm({
 function BuySellForm({
   symbol,
   position,
+  initialSide = "buy",
   onBuy,
   onSell,
   onDone,
 }: {
   symbol: string;
   position: Position | null;
+  initialSide?: "buy" | "sell";
   onBuy: (input: { symbol: string; quantity: number; avgPrice: number; buyDate: string }) => Promise<{ error?: string }>;
   onSell: (symbol: string, quantity: number, price: number, sellDate: string) => Promise<{ error?: string }>;
   onDone: () => void;
 }) {
-  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [side, setSide] = useState<"buy" | "sell">(initialSide);
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
