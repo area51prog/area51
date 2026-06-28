@@ -374,7 +374,7 @@ export default function PortfolioPage() {
                               <Link href={`/dashboard/stocks/${r.p.symbol}`} className="font-semibold text-heading hover:text-brand">
                                 {r.p.symbol}
                               </Link>
-                              {reports[r.p.symbol] && <RatingDot rating={reports[r.p.symbol].rating} />}
+                              {isPremium && reports[r.p.symbol] && <RatingDot rating={reports[r.p.symbol].rating} />}
                             </span>
                             <div className="text-xs text-foreground/50">{r.s?.name ?? "Unknown stock"}</div>
                           </td>
