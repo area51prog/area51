@@ -6,34 +6,38 @@ export async function GET() {
   const { error, status } = await requireAdmin();
   if (error) return Response.json({ ok: false, error }, { status });
 
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
 
-  const [{ data: authUsers, error: authError }, { data: profiles, error: profilesError }] = await Promise.all([
-    admin.auth.admin.listUsers({ perPage: 1000 }),
-    admin.from("profiles").select("id, role, tier, status, created_at"),
-  ]);
+    const [{ data: authUsers, error: authError }, { data: profiles, error: profilesError }] = await Promise.all([
+      admin.auth.admin.listUsers({ perPage: 1000 }),
+      admin.from("profiles").select("id, role, tier, status, created_at"),
+    ]);
 
-  if (authError || profilesError) {
-    return Response.json({ ok: false, error: authError?.message ?? profilesError?.message }, { status: 500 });
+    if (authError || profilesError) {
+      return Response.json({ ok: false, error: authError?.message ?? profilesError?.message }, { status: 500 });
+    }
+
+    const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+
+    const users = authUsers.users.map((u) => {
+      const profile = profileById.get(u.id);
+      return {
+        id: u.id,
+        email: u.email ?? "",
+        full_name: (u.user_metadata?.full_name as string | undefined) ?? "",
+        created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at ?? null,
+        role: profile?.role ?? "user",
+        tier: profile?.tier ?? "free",
+        status: profile?.status ?? "active",
+      };
+    });
+
+    return Response.json({ ok: true, users });
+  } catch (err) {
+    return Response.json({ ok: false, error: err instanceof Error ? err.message : "Failed to load users" }, { status: 500 });
   }
-
-  const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
-
-  const users = authUsers.users.map((u) => {
-    const profile = profileById.get(u.id);
-    return {
-      id: u.id,
-      email: u.email ?? "",
-      full_name: (u.user_metadata?.full_name as string | undefined) ?? "",
-      created_at: u.created_at,
-      last_sign_in_at: u.last_sign_in_at ?? null,
-      role: profile?.role ?? "user",
-      tier: profile?.tier ?? "free",
-      status: profile?.status ?? "active",
-    };
-  });
-
-  return Response.json({ ok: true, users });
 }
 
 export async function POST(req: NextRequest) {
@@ -50,25 +54,29 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false, error: "Email is required" }, { status: 400 });
   }
 
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
 
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-    data: { full_name: fullName },
-  });
+    const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
+      data: { full_name: fullName },
+    });
 
-  if (inviteError || !invited.user) {
-    return Response.json({ ok: false, error: inviteError?.message ?? "Invite failed" }, { status: 500 });
-  }
-
-  if (role !== "user" || tier !== "free") {
-    const { error: profileError } = await admin
-      .from("profiles")
-      .update({ role, tier })
-      .eq("id", invited.user.id);
-    if (profileError) {
-      return Response.json({ ok: false, error: profileError.message }, { status: 500 });
+    if (inviteError || !invited.user) {
+      return Response.json({ ok: false, error: inviteError?.message ?? "Invite failed" }, { status: 500 });
     }
-  }
 
-  return Response.json({ ok: true });
+    if (role !== "user" || tier !== "free") {
+      const { error: profileError } = await admin
+        .from("profiles")
+        .update({ role, tier })
+        .eq("id", invited.user.id);
+      if (profileError) {
+        return Response.json({ ok: false, error: profileError.message }, { status: 500 });
+      }
+    }
+
+    return Response.json({ ok: true });
+  } catch (err) {
+    return Response.json({ ok: false, error: err instanceof Error ? err.message : "Failed to invite user" }, { status: 500 });
+  }
 }
