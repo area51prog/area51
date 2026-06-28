@@ -71,5 +71,37 @@ export function useTransactions() {
     };
   }, [user, supabase]);
 
-  return { transactions, ready };
+  async function updateTransaction(
+    id: string,
+    input: { quantity: number; price: number; txnDate: string }
+  ): Promise<{ error?: string }> {
+    const existing = transactions.find((t) => t.id === id);
+    if (!existing) return { error: "Transaction not found" };
+
+    // Sells carry a realized P&L computed against the cost basis of the lots consumed at
+    // sale time. We don't store that cost basis directly, so back it out from the original
+    // price/realizedPnl and re-apply it to the edited quantity/price to keep P&L consistent.
+    let realizedPnl = existing.realizedPnl;
+    if (existing.side === "sell" && existing.realizedPnl !== null && existing.quantity > 0) {
+      const costBasisPerUnit = existing.price - existing.realizedPnl / existing.quantity;
+      realizedPnl = (input.price - costBasisPerUnit) * input.quantity;
+    }
+
+    const previous = transactions;
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, quantity: input.quantity, price: input.price, txnDate: input.txnDate, realizedPnl } : t))
+    );
+
+    const { error } = await supabase
+      .from("transactions")
+      .update({ quantity: input.quantity, price: input.price, txn_date: input.txnDate, realized_pnl: realizedPnl })
+      .eq("id", id);
+    if (error) {
+      setTransactions(previous);
+      return { error: error.message };
+    }
+    return {};
+  }
+
+  return { transactions, ready, updateTransaction };
 }

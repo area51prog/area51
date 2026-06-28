@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, Trash2, Upload, ArrowUp, ArrowDown, ArrowUpDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Upload, ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, Sparkles, Pencil, Check, X } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getStock } from "@/lib/mock-data";
 import { usePortfolio, SUMMARY_ID, Position, NewHolding } from "@/lib/usePortfolio";
@@ -56,7 +56,7 @@ export default function PortfolioPage() {
   } = usePortfolio();
   const { isPremium } = useProfile();
   const { quotes, sources } = useQuotes(positions.map((p) => p.symbol));
-  const { transactions } = useTransactions();
+  const { transactions, updateTransaction } = useTransactions();
   const reports = useAllGeneratedReports();
   const [adding, setAdding] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
@@ -464,6 +464,13 @@ export default function PortfolioPage() {
                                 {r.p.symbol}
                               </Link>
                               {isPremium && reports[r.p.symbol] && <RatingDot rating={reports[r.p.symbol].rating} />}
+                              <Link
+                                href={`/dashboard/research/${r.p.symbol}`}
+                                className="text-foreground/30 hover:text-brand"
+                                title={reports[r.p.symbol] ? "View research report" : "Generate research report"}
+                              >
+                                <Sparkles size={13} />
+                              </Link>
                             </span>
                             <div className="text-xs text-foreground/50">{r.s?.name ?? "Unknown stock"}</div>
                           </td>
@@ -505,6 +512,7 @@ export default function PortfolioPage() {
                                   transactions={transactions.filter(
                                     (t) => t.portfolioId === activePortfolioId && t.symbol === r.p.symbol
                                   )}
+                                  onUpdateTransaction={updateTransaction}
                                   onBuy={() => setBuySellIntent({ symbol: r.p.symbol, side: "buy" })}
                                   onSell={() => setBuySellIntent({ symbol: r.p.symbol, side: "sell" })}
                                 />
@@ -540,21 +548,59 @@ function HoldingTransactionPanel({
   symbol,
   currentPrice,
   transactions,
+  onUpdateTransaction,
   onBuy,
   onSell,
 }: {
   symbol: string;
   currentPrice: number | null;
   transactions: Transaction[];
+  onUpdateTransaction: (id: string, input: { quantity: number; price: number; txnDate: string }) => Promise<{ error?: string }>;
   onBuy: () => void;
   onSell: () => void;
 }) {
   const sorted = [...transactions].sort((a, b) => b.txnDate.localeCompare(a.txnDate));
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editQuantity, setEditQuantity] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editError, setEditError] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  function startEdit(t: Transaction) {
+    setEditingId(t.id);
+    setEditQuantity(String(t.quantity));
+    setEditPrice(String(t.price));
+    setEditDate(t.txnDate);
+    setEditError("");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditError("");
+  }
+
+  async function saveEdit(id: string) {
+    const qty = Number(editQuantity);
+    const price = Number(editPrice);
+    if (!qty || qty <= 0 || !price || price < 0 || !editDate) {
+      setEditError("Enter a valid quantity, trade price, and trade date.");
+      return;
+    }
+    setSavingEdit(true);
+    const { error } = await onUpdateTransaction(id, { quantity: qty, price, txnDate: editDate });
+    setSavingEdit(false);
+    if (error) {
+      setEditError(error);
+      return;
+    }
+    setEditingId(null);
+  }
 
   return (
     <div className="p-4 bg-background/40 space-y-3">
       <div className="overflow-x-auto">
-        <table className="w-full text-xs min-w-[760px]">
+        <table className="w-full text-xs min-w-[820px]">
           <thead>
             <tr className="text-left text-foreground/40 uppercase tracking-wide border-b border-line">
               <th className="py-1.5 pr-3 font-semibold">Stock</th>
@@ -563,23 +609,81 @@ function HoldingTransactionPanel({
               <th className="py-1.5 pr-3 font-semibold text-right">Trade price</th>
               <th className="py-1.5 pr-3 font-semibold text-right">Trade amount</th>
               <th className="py-1.5 pr-3 font-semibold text-right">Overall gain</th>
-              <th className="py-1.5 font-semibold text-right">Overall gain (%)</th>
+              <th className="py-1.5 pr-3 font-semibold text-right">Overall gain (%)</th>
+              <th className="py-1.5 font-semibold text-right"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-3 text-center text-foreground/40">
+                <td colSpan={8} className="py-3 text-center text-foreground/40">
                   No transactions recorded yet.
                 </td>
               </tr>
             ) : (
               sorted.map((t) => {
+                const isEditing = editingId === t.id;
                 const amount = t.quantity * t.price;
                 const gain = t.side === "sell" ? t.realizedPnl : currentPrice !== null ? (currentPrice - t.price) * t.quantity : null;
                 const gainPct = gain !== null && amount ? (gain / amount) * 100 : null;
+
+                if (isEditing) {
+                  return (
+                    <tr key={t.id}>
+                      <td className="py-2 pr-3 font-semibold text-heading">{symbol}</td>
+                      <td className="py-1.5 pr-3 text-right">
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={editQuantity}
+                          onChange={(e) => setEditQuantity(e.target.value)}
+                          className="w-20 rounded-md border border-line bg-surface text-foreground px-2 py-1 text-xs text-right outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+                        />
+                      </td>
+                      <td className="py-1.5 pr-3">
+                        <input
+                          type="date"
+                          value={editDate}
+                          onChange={(e) => setEditDate(e.target.value)}
+                          className="w-32 rounded-md border border-line bg-surface text-foreground px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+                        />
+                      </td>
+                      <td className="py-1.5 pr-3 text-right">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editPrice}
+                          onChange={(e) => setEditPrice(e.target.value)}
+                          className="w-24 rounded-md border border-line bg-surface text-foreground px-2 py-1 text-xs text-right outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+                        />
+                      </td>
+                      <td className="py-2 pr-3 text-right text-foreground/40" colSpan={3}>
+                        {editError && <span className="text-down">{editError}</span>}
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => saveEdit(t.id)}
+                            disabled={savingEdit}
+                            className="text-up hover:text-up/80 disabled:opacity-50"
+                            title="Save"
+                          >
+                            <Check size={15} />
+                          </button>
+                          <button type="button" onClick={cancelEdit} className="text-foreground/40 hover:text-down" title="Cancel">
+                            <X size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
+
                 return (
-                  <tr key={t.id}>
+                  <tr key={t.id} className="group">
                     <td className="py-2 pr-3 font-semibold text-heading">{symbol}</td>
                     <td className="py-2 pr-3 text-right">
                       {t.side === "sell" ? "-" : ""}
@@ -591,8 +695,18 @@ function HoldingTransactionPanel({
                     <td className={`py-2 pr-3 text-right font-medium ${gain === null ? "text-foreground/40" : gain >= 0 ? "text-up" : "text-down"}`}>
                       {gain === null ? "—" : `${gain >= 0 ? "+" : ""}${formatINRCompact(gain)}`}
                     </td>
-                    <td className={`py-2 text-right font-medium ${gainPct === null ? "text-foreground/40" : gainPct >= 0 ? "text-up" : "text-down"}`}>
+                    <td className={`py-2 pr-3 text-right font-medium ${gainPct === null ? "text-foreground/40" : gainPct >= 0 ? "text-up" : "text-down"}`}>
                       {gainPct === null ? "—" : `${gainPct >= 0 ? "+" : ""}${gainPct.toFixed(2)}%`}
+                    </td>
+                    <td className="py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(t)}
+                        className="text-foreground/40 hover:text-brand opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Edit transaction"
+                      >
+                        <Pencil size={14} />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -688,11 +802,12 @@ function AddHoldingForm({
   return (
     <Card>
       <form onSubmit={handleSubmit} className="space-y-3">
-        {rows.map((row) => (
+        {rows.map((row, i) => (
           <div key={row.id} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 items-end">
             <HoldingStockSearch
               symbol={row.symbol}
               name={row.name}
+              autoFocus={i === 0}
               onSelect={(symbol, name) => updateRow(row.id, { symbol, name })}
               onClear={() => updateRow(row.id, { symbol: "", name: "" })}
             />
@@ -774,11 +889,13 @@ function AddHoldingForm({
 function HoldingStockSearch({
   symbol,
   name,
+  autoFocus,
   onSelect,
   onClear,
 }: {
   symbol: string;
   name: string;
+  autoFocus?: boolean;
   onSelect: (symbol: string, name: string) => void;
   onClear: () => void;
 }) {
@@ -814,6 +931,7 @@ function HoldingStockSearch({
     <label className="block relative">
       <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Stock</span>
       <input
+        autoFocus={autoFocus}
         value={symbol ? `${symbol} — ${name}` : query}
         onChange={(e) => {
           onClear();

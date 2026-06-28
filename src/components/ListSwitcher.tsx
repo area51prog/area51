@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Plus, MoreVertical } from "lucide-react";
 import { useProfile } from "@/lib/useProfile";
 
@@ -40,6 +40,18 @@ export function ListSwitcher({
 
   const atLimit = lists.length >= maxLists;
   const active = lists.find((l) => l.id === activeId);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
 
   function startEdit(list: ListOption) {
     setMenuForId(null);
@@ -146,7 +158,7 @@ export function ListSwitcher({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
