@@ -1,5 +1,4 @@
 import {
-  DividendEvent,
   ResearchReport,
   Stock,
 } from "./types";
@@ -115,17 +114,6 @@ export function toFinnhubSymbol(symbol: string) {
   return FINNHUB_SYMBOL_MAP[symbol] ?? symbol;
 }
 
-
-export const DIVIDENDS: DividendEvent[] = [
-  { symbol: "CIPLA", exDate: "2026-07-18", paymentDate: "2026-08-05", amountPerShare: 13, type: "Final" },
-  { symbol: "INFY", exDate: "2026-07-02", paymentDate: "2026-07-22", amountPerShare: 21, type: "Interim" },
-  { symbol: "HDFCBANK", exDate: "2026-06-28", paymentDate: "2026-07-15", amountPerShare: 5.5, type: "Final" },
-  { symbol: "ITC", exDate: "2026-08-10", paymentDate: "2026-08-30", amountPerShare: 6.75, type: "Interim" },
-  { symbol: "SBIN", exDate: "2026-09-05", paymentDate: "2026-09-25", amountPerShare: 13.7, type: "Final" },
-  { symbol: "SUNPHARMA", exDate: "2026-07-25", paymentDate: "2026-08-12", amountPerShare: 11.5, type: "Final" },
-  { symbol: "CIPLA", exDate: "2025-08-01", paymentDate: "2025-08-20", amountPerShare: 12, type: "Final" },
-  { symbol: "INFY", exDate: "2026-01-15", paymentDate: "2026-02-02", amountPerShare: 18, type: "Interim" },
-];
 
 export const RESEARCH_REPORTS: ResearchReport[] = [
   {

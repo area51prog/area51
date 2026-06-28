@@ -29,20 +29,38 @@ export type Database = {
         }
         Relationships: []
       }
-      dividend_cache: {
+      corporate_actions: {
         Row: {
-          events: Json
+          action_type: string
+          amount: number | null
+          details: string | null
+          ex_date: string | null
           fetched_at: string
+          id: string
+          raw_name: string
+          sub_type: string | null
           symbol: string
         }
         Insert: {
-          events: Json
+          action_type: string
+          amount?: number | null
+          details?: string | null
+          ex_date?: string | null
           fetched_at?: string
+          id?: string
+          raw_name: string
+          sub_type?: string | null
           symbol: string
         }
         Update: {
-          events?: Json
+          action_type?: string
+          amount?: number | null
+          details?: string | null
+          ex_date?: string | null
           fetched_at?: string
+          id?: string
+          raw_name?: string
+          sub_type?: string | null
           symbol?: string
         }
         Relationships: []
@@ -365,10 +383,7 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: Record<string, unknown>
       }
-      is_admin: {
-        Args: { uid: string }
-        Returns: boolean
-      }
+      is_admin: { Args: { uid: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

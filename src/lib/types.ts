@@ -112,12 +112,16 @@ export interface Holding {
   buyDate: string;
 }
 
-export interface DividendEvent {
+export type ActionType = "Dividend" | "Bonus" | "Split" | "Rights" | "Buyback" | "Merger" | "Delisting";
+
+export interface CorporateActionRow {
   symbol: string;
-  exDate: string;
-  paymentDate: string;
-  amountPerShare: number;
-  type: "Interim" | "Final" | "Special";
+  actionType: ActionType;
+  subType: string | null;
+  exDate: string | null;
+  amount: number | null;
+  rawName: string;
+  details: string | null;
 }
 
 export type Rating = "BUY" | "HOLD" | "REDUCE" | "SELL";

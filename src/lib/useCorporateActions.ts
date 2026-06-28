@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DividendEvent } from "./types";
+import { CorporateActionRow } from "./types";
 
-export function useDividends(symbols: string[]) {
-  const [events, setEvents] = useState<DividendEvent[]>([]);
+export function useCorporateActions(symbols: string[]) {
+  const [events, setEvents] = useState<CorporateActionRow[]>([]);
   const [ready, setReady] = useState(false);
   const key = symbols.slice().sort().join(",");
 
@@ -19,9 +19,9 @@ export function useDividends(symbols: string[]) {
     let cancelled = false;
     setReady(false);
 
-    fetch(`/api/dividends?symbols=${encodeURIComponent(key)}`)
+    fetch(`/api/corporate-actions?symbols=${encodeURIComponent(key)}`)
       .then((res) => res.json())
-      .then((body: { ok: boolean; events?: DividendEvent[] }) => {
+      .then((body: { ok: boolean; events?: CorporateActionRow[] }) => {
         if (cancelled) return;
         setEvents(body.events ?? []);
         setReady(true);
