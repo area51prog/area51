@@ -144,6 +144,17 @@ Source of truth: `src/lib/supabase/database.types.ts` (generated types).
 
 Write-through cache populated by every successful call in `src/lib/providers/upstox.ts`. Read back via `getStaleUpstox*` helpers (`src/lib/staleCache.ts`) when the live Upstox call fails — e.g. an expired OAuth token — so routes can serve the last real snapshot instead of falling straight to mock data. See §5 (`/api/quotes`, `/api/stocks/[symbol]/quote`, `/api/stocks/[symbol]/fundamentals`, `/api/market-snapshot`) for the stale-fallback response shape.
 
+### `stock_price_history`
+| Column | Type | Notes |
+|---|---|---|
+| `symbol` | `string` (PK, composite with `trade_date`) | |
+| `trade_date` | `string` (PK, composite with `symbol`) | |
+| `open` / `high` / `low` / `close` | `number` | daily OHLC |
+| `volume` | `number` | default applied |
+| `fetched_at` | `string` | default applied |
+
+"Golden copy" of daily OHLCV per symbol, lazily backfilled by `ensureGoldenHistory` (`src/lib/priceHistory.ts`) the first time a symbol's history is searched/resolved, and re-fetched from Upstox only once the stored data goes stale. `resolveStock` and `/api/stocks/[symbol]/history` read through this table instead of hitting Upstox live every time; Analytics' Risk tab sources real per-holding volatility from it (via `useHistoryMap`, client-cached for 1h) instead of synthetic data.
+
 ### `notifications`
 | Column | Type | Notes |
 |---|---|---|
@@ -185,7 +196,7 @@ All user-scoped tables (`watchlists`, `watchlist`, `portfolios`, `portfolio_hold
 ```sql
 auth.uid() = user_id
 ```
-on both `USING` and `WITH CHECK` clauses. `research_reports`, `dividend_cache`, `market_data_cache`, and `app_settings` are shared/cached data, not user-scoped — readable/writable by any authenticated user.
+on both `USING` and `WITH CHECK` clauses. `research_reports`, `dividend_cache`, `market_data_cache`, `stock_price_history`, and `app_settings` are shared/cached data, not user-scoped — readable/writable by any authenticated user. Note: `research_reports.generated_by` is tracked but the table itself isn't RLS-scoped by user; visibility filtering for "your reports" is done client-side in `useResearch()` (see §8).
 
 ---
 
@@ -311,9 +322,9 @@ Admin routes are gated by a `requireAdmin()` middleware that checks the `is_admi
 | Route | File | Purpose |
 |---|---|---|
 | `/dashboard` | `dashboard/page.tsx` | Overview: market snapshot, net worth, asset allocation |
-| `/dashboard/watchlist` | `watchlist/page.tsx` | Watchlist management (multi-list) |
-| `/dashboard/portfolio` | `portfolio/page.tsx` | Multi-portfolio (premium), holdings, P&L, CSV bulk import |
-| `/dashboard/transactions` | `transactions/page.tsx` | Buy/sell history with realized P&L |
+| `/dashboard/watchlist` | `watchlist/page.tsx` | Watchlist management (multi-list), sortable columns |
+| `/dashboard/portfolio` | `portfolio/page.tsx` | Multi-portfolio (premium), sortable holdings table, allocation chart (sub-5% holdings grouped into "Others"), P&L, multi-row add holding, CSV bulk import |
+| `/dashboard/transactions` | `transactions/page.tsx` | Buy/sell history with realized P&L, sortable columns, collapsible month cards (current month expanded by default) |
 | `/dashboard/dividends` | `dividends/page.tsx` | Upcoming dividends, projected annual income |
 | `/dashboard/stocks/[symbol]` | `stocks/[symbol]/page.tsx` | Quote, chart, fundamentals, depth |
 | `/dashboard/research` | `research/page.tsx` | List of generated research reports |
@@ -334,11 +345,12 @@ No global state library — React Context (`AuthContext`) plus domain-specific c
 | `useAuth()` | login/signup/logout/password reset, current user |
 | `useProfile()` | tier, role, status, `isPremium`, `isAdmin` |
 | `useWatchlist()` | CRUD on watchlists/entries; active list persisted in `localStorage` (`area51_active_watchlist`) |
-| `usePortfolio()` | multi-portfolio CRUD, position aggregation (qty/avg cost per symbol), bulk add, buy/sell |
+| `usePortfolio()` | multi-portfolio CRUD, position aggregation (qty/avg cost per symbol), single and bulk add (`bulkAddHoldings`), buy/sell |
 | `useQuotes()` | batch live-quote fetch |
 | `useTransactions()` | transaction history |
 | `useDividends()` | dividend events for held symbols |
-| `useResearch()` | fetch cached or trigger generation of a research report |
+| `useHistoryMap()` | per-symbol daily price history from `stock_price_history` (via golden-history API), module-level 1h client cache |
+| `useResearch()` | fetch cached or trigger generation of a research report; `useAllGeneratedReports` scopes results to `generated_by` = current user |
 | `useNotifications()` | notification list + mark-read |
 
 ---
