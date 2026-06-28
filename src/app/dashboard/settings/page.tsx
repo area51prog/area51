@@ -20,6 +20,8 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   researchReady: true,
 };
 
+const COUNTRY_CODES = ["+91", "+1", "+44", "+61", "+971", "+65", "+81", "+86", "+49", "+33"];
+
 interface ProvidersStatus {
   upstoxConfigured: boolean;
   upstoxConnected: boolean;
@@ -48,6 +50,8 @@ function SettingsPageInner() {
   const searchParams = useSearchParams();
   const [supabase] = useState(() => createClient());
   const [name, setName] = useState(user?.name ?? "");
+  const [countryCode, setCountryCode] = useState("+91");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -70,6 +74,9 @@ function SettingsPageInner() {
     supabase.auth.getUser().then(({ data }) => {
       const prefs = data.user?.user_metadata?.notification_prefs as Partial<NotificationPrefs> | undefined;
       if (prefs) setNotificationPrefs({ ...DEFAULT_NOTIFICATION_PREFS, ...prefs });
+      const metadata = data.user?.user_metadata;
+      if (metadata?.phone_country_code) setCountryCode(metadata.phone_country_code as string);
+      if (metadata?.phone_number) setPhoneNumber(metadata.phone_number as string);
     });
   }, [supabase]);
 
@@ -88,7 +95,9 @@ function SettingsPageInner() {
     e.preventDefault();
     setSaving(true);
     setSaveError("");
-    const { error } = await supabase.auth.updateUser({ data: { full_name: name } });
+    const { error } = await supabase.auth.updateUser({
+      data: { full_name: name, phone_country_code: countryCode, phone_number: phoneNumber },
+    });
     setSaving(false);
     if (error) {
       setSaveError(error.message);
@@ -224,6 +233,29 @@ function SettingsPageInner() {
               className="w-full rounded-lg border border-line bg-background px-3.5 py-2.5 text-sm text-foreground/50"
             />
           </label>
+          <label className="block">
+            <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Phone number</span>
+            <div className="flex gap-2">
+              <select
+                value={countryCode}
+                onChange={(e) => setCountryCode(e.target.value)}
+                className="w-24 rounded-lg border border-line bg-surface text-foreground px-2.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+              >
+                {COUNTRY_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="9876543210"
+                className="w-full rounded-lg border border-line bg-surface text-foreground px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+              />
+            </div>
+          </label>
           <div className="flex items-center gap-3">
             <button
               type="submit"
@@ -245,16 +277,20 @@ function SettingsPageInner() {
             checked={notificationPrefs.priceAlerts}
             onChange={(value) => handleNotificationPrefChange("priceAlerts", value)}
           />
-          <Toggle
-            label="Upcoming dividend reminders"
-            checked={notificationPrefs.dividendReminders}
-            onChange={(value) => handleNotificationPrefChange("dividendReminders", value)}
-          />
-          <Toggle
-            label="New research report ready"
-            checked={notificationPrefs.researchReady}
-            onChange={(value) => handleNotificationPrefChange("researchReady", value)}
-          />
+          {isPremium && (
+            <Toggle
+              label="Upcoming dividend reminders"
+              checked={notificationPrefs.dividendReminders}
+              onChange={(value) => handleNotificationPrefChange("dividendReminders", value)}
+            />
+          )}
+          {isPremium && (
+            <Toggle
+              label="New research report ready"
+              checked={notificationPrefs.researchReady}
+              onChange={(value) => handleNotificationPrefChange("researchReady", value)}
+            />
+          )}
         </div>
       </Card>
 

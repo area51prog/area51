@@ -35,15 +35,28 @@ export default function SupportPage() {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSending(true);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    setSending(false);
-    setSent(true);
-    setSubject("");
-    setMessage("");
+    setSendError("");
+    try {
+      const res = await fetch("/api/support", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, message }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to send message.");
+      setSent(true);
+      setSubject("");
+      setMessage("");
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Failed to send message.");
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -99,24 +112,27 @@ export default function SupportPage() {
                 className="w-full rounded-lg border border-line bg-surface text-foreground px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none"
               />
             </label>
-            <button
-              type="submit"
-              disabled={sending}
-              className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 disabled:opacity-60"
-            >
-              {sending ? "Sending…" : "Send message"}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={sending}
+                className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 disabled:opacity-60"
+              >
+                {sending ? "Sending…" : "Send message"}
+              </button>
+              {sendError && <span className="text-sm text-down">{sendError}</span>}
+            </div>
           </form>
         )}
       </Card>
 
       <Card title="Other ways to reach us">
         <a
-          href="mailto:sos@alloqo.com"
+          href="mailto:support@alloqo.com"
           className="flex items-center gap-3 text-sm font-semibold text-foreground/70 hover:text-brand"
         >
           <Mail size={16} />
-          sos@alloqo.com
+          support@alloqo.com
         </a>
       </Card>
     </div>
