@@ -46,6 +46,7 @@ export default function PortfolioPage() {
     createPortfolio,
     renamePortfolio,
     deletePortfolio,
+    lots,
     positions,
     ready,
     buyHolding,
@@ -154,6 +155,42 @@ export default function PortfolioPage() {
     const dayPnl = priceKnown ? (s!.price - s!.prevClose) * p.quantity : 0;
     return { p, s, priceKnown, invested, value, gain, gainPct, dayChangePct, dayPnl };
   });
+
+  const priceBySymbol = new Map(
+    rows.map((r) => [r.p.symbol, { price: r.priceKnown ? r.s!.price : null, prevClose: r.priceKnown ? r.s!.prevClose : null }])
+  );
+
+  const showPortfolioSummary = isPremium && isSummary && lists.length > 1;
+  const portfolioSummaries = showPortfolioSummary
+    ? lists.map((list) => {
+        const portfolioLots = lots.filter((l) => l.portfolioId === list.id);
+        let invested = 0;
+        let value = 0;
+        let dayPnl = 0;
+        for (const lot of portfolioLots) {
+          const quote = priceBySymbol.get(lot.symbol);
+          const priceKnown = Boolean(quote && quote.price !== null);
+          invested += lot.avgPrice * lot.quantity;
+          value += (priceKnown ? quote!.price! : lot.avgPrice) * lot.quantity;
+          if (priceKnown && quote!.prevClose) dayPnl += (quote!.price! - quote!.prevClose!) * lot.quantity;
+        }
+        const gain = value - invested;
+        const gainPct = invested ? (gain / invested) * 100 : 0;
+        return { id: list.id, name: list.name, invested, value, gain, gainPct, dayPnl };
+      })
+    : [];
+  const portfolioSummaryTotals = portfolioSummaries.reduce(
+    (acc, p) => ({
+      invested: acc.invested + p.invested,
+      value: acc.value + p.value,
+      dayPnl: acc.dayPnl + p.dayPnl,
+    }),
+    { invested: 0, value: 0, dayPnl: 0 }
+  );
+  const portfolioSummaryTotalGain = portfolioSummaryTotals.value - portfolioSummaryTotals.invested;
+  const portfolioSummaryTotalGainPct = portfolioSummaryTotals.invested
+    ? (portfolioSummaryTotalGain / portfolioSummaryTotals.invested) * 100
+    : 0;
 
   const sortedRows = [...rows].sort((a, b) => {
     let diff = 0;
@@ -316,6 +353,58 @@ export default function PortfolioPage() {
               </div>
             </Card>
           </div>
+
+          {showPortfolioSummary && (
+            <Card title="Portfolio Summary">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[680px]">
+                  <thead>
+                    <tr className="text-left text-xs text-foreground/40 uppercase tracking-wide border-b border-line">
+                      <th className="py-2 font-semibold">Portfolio</th>
+                      <th className="py-2 font-semibold text-right">Invested</th>
+                      <th className="py-2 font-semibold text-right">Current value</th>
+                      <th className="py-2 font-semibold text-right">Unrealised P&amp;L</th>
+                      <th className="py-2 font-semibold text-right">Day P&amp;L</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {portfolioSummaries.map((p) => (
+                      <tr key={p.id}>
+                        <td className="py-3 font-semibold text-heading">{p.name}</td>
+                        <td className="py-3 text-right">{formatINRCompact(p.invested)}</td>
+                        <td className="py-3 text-right font-medium">{formatINRCompact(p.value)}</td>
+                        <td className={`py-3 text-right font-semibold ${p.gain >= 0 ? "text-up" : "text-down"}`}>
+                          {p.gain >= 0 ? "+" : ""}
+                          {formatINRCompact(p.gain)}
+                          <span className="block text-xs font-normal">{p.gainPct.toFixed(2)}%</span>
+                        </td>
+                        <td className={`py-3 text-right font-semibold ${p.dayPnl >= 0 ? "text-up" : "text-down"}`}>
+                          {p.dayPnl >= 0 ? "+" : ""}
+                          {formatINRCompact(p.dayPnl)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-line font-semibold">
+                      <td className="py-3 text-heading">Total</td>
+                      <td className="py-3 text-right">{formatINRCompact(portfolioSummaryTotals.invested)}</td>
+                      <td className="py-3 text-right">{formatINRCompact(portfolioSummaryTotals.value)}</td>
+                      <td className={`py-3 text-right ${portfolioSummaryTotalGain >= 0 ? "text-up" : "text-down"}`}>
+                        {portfolioSummaryTotalGain >= 0 ? "+" : ""}
+                        {formatINRCompact(portfolioSummaryTotalGain)}
+                        <span className="block text-xs font-normal">{portfolioSummaryTotalGainPct.toFixed(2)}%</span>
+                      </td>
+                      <td className={`py-3 text-right ${portfolioSummaryTotals.dayPnl >= 0 ? "text-up" : "text-down"}`}>
+                        {portfolioSummaryTotals.dayPnl >= 0 ? "+" : ""}
+                        {formatINRCompact(portfolioSummaryTotals.dayPnl)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </Card>
+          )}
 
           <Card
             title="Holdings"
