@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Star, Trash2, Plus, FileSearch } from "lucide-react";
+import clsx from "clsx";
+import { Star, Trash2, Plus, FileSearch, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { getStock } from "@/lib/mock-data";
 import { useWatchlist } from "@/lib/useWatchlist";
 import { useQuotes } from "@/lib/useQuotes";
@@ -17,10 +18,23 @@ interface SymbolResult {
   exchange: Exchange;
 }
 
+type SortKey = "symbol" | "price" | "change" | "source" | "week52" | "pe";
+
+const SORT_COLUMNS: { key: SortKey; label: string; align: "left" | "right"; hidden?: string }[] = [
+  { key: "symbol", label: "Stock", align: "left" },
+  { key: "price", label: "Price", align: "right" },
+  { key: "change", label: "Change", align: "right" },
+  { key: "source", label: "Source", align: "right", hidden: "hidden md:table-cell" },
+  { key: "week52", label: "52w range", align: "right", hidden: "hidden sm:table-cell" },
+  { key: "pe", label: "P/E", align: "right", hidden: "hidden sm:table-cell" },
+];
+
 export default function WatchlistPage() {
   const { lists, activeListId, switchList, createList, renameList, deleteList, symbols, ready, remove, add } =
     useWatchlist();
   const [adding, setAdding] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("symbol");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [query, setQuery] = useState("");
   const [addError, setAddError] = useState("");
   const [candidates, setCandidates] = useState<SymbolResult[]>([]);
@@ -110,6 +124,38 @@ export default function WatchlistPage() {
   const { quotes, sources } = useQuotes(baseStocks.map((s) => s.symbol));
   const stocks = baseStocks.map((s) => withLiveQuote(s, quotes[s.symbol]));
 
+  const sortedStocks = [...stocks].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    switch (sortKey) {
+      case "symbol":
+        return a.symbol.localeCompare(b.symbol) * dir;
+      case "price":
+        return (a.price - b.price) * dir;
+      case "change": {
+        const pctA = a.prevClose ? ((a.price - a.prevClose) / a.prevClose) * 100 : 0;
+        const pctB = b.prevClose ? ((b.price - b.prevClose) / b.prevClose) * 100 : 0;
+        return (pctA - pctB) * dir;
+      }
+      case "source":
+        return (sources[a.symbol] ?? "").localeCompare(sources[b.symbol] ?? "") * dir;
+      case "week52":
+        return (a.week52High - b.week52High) * dir;
+      case "pe":
+        return ((a.peRatio ?? -Infinity) - (b.peRatio ?? -Infinity)) * dir;
+      default:
+        return 0;
+    }
+  });
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
   if (!ready) return null;
 
   return (
@@ -184,17 +230,29 @@ export default function WatchlistPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-foreground/40 uppercase tracking-wide border-b border-line">
-                <th className="py-2 font-semibold">Stock</th>
-                <th className="py-2 font-semibold text-right">Price</th>
-                <th className="py-2 font-semibold text-right">Change</th>
-                <th className="py-2 font-semibold text-right hidden md:table-cell">Source</th>
-                <th className="py-2 font-semibold text-right hidden sm:table-cell">52w range</th>
-                <th className="py-2 font-semibold text-right hidden sm:table-cell">P/E</th>
+                {SORT_COLUMNS.map((col) => (
+                  <th key={col.key} className={clsx("py-2 font-semibold", col.align === "right" && "text-right", col.hidden)}>
+                    <button
+                      onClick={() => handleSort(col.key)}
+                      className={clsx(
+                        "inline-flex items-center gap-1 hover:text-foreground/70",
+                        col.align === "right" && "flex-row-reverse"
+                      )}
+                    >
+                      {col.label}
+                      {sortKey === col.key ? (
+                        sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+                      ) : (
+                        <ArrowUpDown size={12} className="opacity-30" />
+                      )}
+                    </button>
+                  </th>
+                ))}
                 <th className="py-2 font-semibold text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {stocks.map((s) => {
+              {sortedStocks.map((s) => {
                 const pct = s.prevClose ? ((s.price - s.prevClose) / s.prevClose) * 100 : 0;
                 return (
                   <tr key={s.symbol} className="group">
