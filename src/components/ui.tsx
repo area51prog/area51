@@ -55,16 +55,16 @@ export function ChangeBadge({ value, percent }: { value?: number; percent: numbe
 }
 
 const SOURCE_LABEL: Record<QuoteSource, string> = {
-  upstox: "Upstox",
+  upstox: "Live",
   finnhub: "Finnhub",
-  "upstox-stale": "Upstox (stale)",
+  "upstox-stale": "Live (stale)",
   mock: "Mock",
 };
 
 const SOURCE_TITLE: Record<QuoteSource, string> = {
-  upstox: "Live price via Upstox",
+  upstox: "Live price",
   finnhub: "Live price via Finnhub",
-  "upstox-stale": "Upstox token expired — showing the last price Upstox reported before it went down",
+  "upstox-stale": "Live token expired — showing the last price reported before it went down",
   mock: "Showing mock data — no live provider had data for this symbol",
 };
 

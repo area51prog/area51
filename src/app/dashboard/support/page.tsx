@@ -8,11 +8,11 @@ import { Card } from "@/components/ui";
 const FAQS = [
   {
     q: "Why does a price show as Mock instead of Live?",
-    a: "Live prices come from Upstox first, then Finnhub as a fallback. If neither provider has data for a symbol, the app shows the last known mock price. Check Settings → Market data providers to connect or reconnect a provider.",
+    a: "Prices come from Live first, then Finnhub as a fallback. If neither provider has data for a symbol, the app shows the last known mock price. Check Settings → Market data providers to connect or reconnect a provider.",
   },
   {
-    q: "My Upstox connection keeps failing.",
-    a: "Upstox access tokens expire daily at 3:30am IST and must be reconnected each day. Make sure UPSTOX_CLIENT_ID and UPSTOX_CLIENT_SECRET are set correctly, and that the redirect URI matches what's configured in your Upstox developer app.",
+    q: "My Live connection keeps failing.",
+    a: "Live access tokens expire daily at 3:30am IST and must be reconnected each day. Make sure UPSTOX_CLIENT_ID and UPSTOX_CLIENT_SECRET are set correctly, and that the redirect URI matches what's configured in your Upstox developer app.",
   },
   {
     q: "How do I add or remove holdings from my portfolio?",

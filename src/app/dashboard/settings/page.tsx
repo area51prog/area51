@@ -30,8 +30,8 @@ interface ProvidersStatus {
 }
 
 const UPSTOX_MESSAGES: Record<string, { tone: "up" | "down"; text: string }> = {
-  connected: { tone: "up", text: "Upstox connected successfully." },
-  error: { tone: "down", text: "Upstox connection failed. Check your client ID/secret and redirect URI, then try again." },
+  connected: { tone: "up", text: "Live connected successfully." },
+  error: { tone: "down", text: "Live connection failed. Check your client ID/secret and redirect URI, then try again." },
   not_configured: { tone: "down", text: "Add UPSTOX_CLIENT_ID and UPSTOX_CLIENT_SECRET to .env.local first." },
 };
 
@@ -162,7 +162,7 @@ function SettingsPageInner() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-semibold text-heading">Upstox</div>
+              <div className="text-sm font-semibold text-heading">Live</div>
               <div className="text-xs text-foreground/50">
                 Primary provider for NSE live quotes. Access tokens expire daily at 3:30am IST.
               </div>
@@ -184,7 +184,7 @@ function SettingsPageInner() {
                 href="/api/upstox/login"
                 className="rounded-lg bg-brand text-white text-xs font-semibold px-3.5 py-2 hover:bg-brand/90"
               >
-                Connect Upstox
+                Connect Live
               </a>
             ) : (
               <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground/40">
@@ -196,7 +196,7 @@ function SettingsPageInner() {
           <div className="flex items-center justify-between border-t border-line pt-4">
             <div>
               <div className="text-sm font-semibold text-heading">Finnhub</div>
-              <div className="text-xs text-foreground/50">Fallback provider — used when Upstox has no data for a symbol.</div>
+              <div className="text-xs text-foreground/50">Fallback provider — used when Live has no data for a symbol.</div>
             </div>
             {providers?.finnhubConfigured ? (
               <span className="flex items-center gap-1.5 text-xs font-semibold text-up">
@@ -210,7 +210,7 @@ function SettingsPageInner() {
           </div>
 
           <p className="text-xs text-foreground/40 pt-1">
-            Provider order: Upstox → Finnhub → mock data. The Live/Mock badge next to prices throughout the app shows which one served each quote.
+            Provider order: Live → Finnhub → mock data. The Live/Mock badge next to prices throughout the app shows which one served each quote.
           </p>
         </div>
       </Card>

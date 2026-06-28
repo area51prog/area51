@@ -204,13 +204,13 @@ export default function StockDetailPage() {
                 {quoteStale ? (
                   <span
                     className="text-[11px] font-semibold text-amber-500 flex items-center gap-1.5"
-                    title={`Upstox token expired — showing the last price reported on ${new Date(quoteStale).toLocaleString("en-IN")}`}
+                    title={`Live token expired — showing the last price reported on ${new Date(quoteStale).toLocaleString("en-IN")}`}
                   >
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Stale · Upstox
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Stale
                   </span>
                 ) : (
                   <span className="text-[11px] font-semibold text-up flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-up" /> Live · Upstox
+                    <span className="h-1.5 w-1.5 rounded-full bg-up" /> Live
                   </span>
                 )}
               </>
@@ -433,7 +433,7 @@ function TrendsTab({
                   />
                 ))}
               </div>
-              <p className="text-xs text-foreground/40 mt-1">Volume · Upstox historical candle data</p>
+              <p className="text-xs text-foreground/40 mt-1">Volume · Live historical candle data</p>
             </>
           )}
         </>
@@ -474,7 +474,7 @@ function FundamentalsTab({
     <div className="space-y-4">
       {staleAt && (
         <p className="text-xs font-medium text-amber-500">
-          Upstox token expired — showing fundamentals last fetched {new Date(staleAt).toLocaleString("en-IN")}.
+          Live token expired — showing fundamentals last fetched {new Date(staleAt).toLocaleString("en-IN")}.
         </p>
       )}
       {profile && (
