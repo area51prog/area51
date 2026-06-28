@@ -323,7 +323,7 @@ Admin routes are gated by a `requireAdmin()` middleware that checks the `is_admi
 |---|---|---|
 | `/dashboard` | `dashboard/page.tsx` | Overview: market snapshot, net worth, asset allocation |
 | `/dashboard/watchlist` | `watchlist/page.tsx` | Watchlist management (multi-list), sortable columns |
-| `/dashboard/portfolio` | `portfolio/page.tsx` | Multi-portfolio (premium), sortable holdings table (defaults to Stock A-Z on individual portfolios), allocation chart (sub-5% holdings grouped into "Others"), P&L, expandable per-stock transaction history with single buy/sell, multi-row add holding, CSV bulk import |
+| `/dashboard/portfolio` | `portfolio/page.tsx` | Multi-portfolio (premium), sortable holdings table (defaults to Stock A-Z), allocation chart (sub-5% holdings grouped into "Others"), P&L, research-rating dot next to stocks with a generated report, expandable per-stock transaction history with single buy/sell, multi-row add holding, CSV bulk import |
 | `/dashboard/transactions` | `transactions/page.tsx` | Buy/sell history with realized P&L, sortable columns, collapsible month cards (current month expanded by default) |
 | `/dashboard/dividends` | `dividends/page.tsx` | Upcoming dividends, projected annual income |
 | `/dashboard/stocks/[symbol]` | `stocks/[symbol]/page.tsx` | Quote, chart, fundamentals, depth |

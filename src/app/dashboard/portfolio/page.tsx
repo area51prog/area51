@@ -9,10 +9,11 @@ import { usePortfolio, SUMMARY_ID, Position, NewHolding } from "@/lib/usePortfol
 import { useProfile } from "@/lib/useProfile";
 import { useQuotes } from "@/lib/useQuotes";
 import { useTransactions, Transaction } from "@/lib/useTransactions";
+import { useAllGeneratedReports } from "@/lib/useResearch";
 import { withLiveQuote } from "@/lib/liveStock";
 import { Exchange, Stock } from "@/lib/types";
 import { formatINR, formatINRCompact, formatDate } from "@/lib/format";
-import { Card, ChangeBadge, LiveBadge, Stat } from "@/components/ui";
+import { Card, ChangeBadge, LiveBadge, RatingDot, Stat } from "@/components/ui";
 import { ListSwitcher } from "@/components/ListSwitcher";
 import { parseCsv, validateBulkRows, bulkUploadTemplate, BulkRowError } from "@/lib/csv";
 
@@ -55,14 +56,15 @@ export default function PortfolioPage() {
   const { isPremium } = useProfile();
   const { quotes, sources } = useQuotes(positions.map((p) => p.symbol));
   const { transactions } = useTransactions();
+  const reports = useAllGeneratedReports();
   const [adding, setAdding] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
   const [buySellIntent, setBuySellIntent] = useState<{ symbol: string; side: "buy" | "sell" } | null>(null);
   const [expandedSymbols, setExpandedSymbols] = useState<Set<string>>(new Set());
   const [info, setInfo] = useState<Record<string, SymbolResult>>({});
   const fetchedInfoRef = useRef<Set<string>>(new Set());
-  const [sortKey, setSortKey] = useState<SortKey>(isSummary ? "value" : "symbol");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">(isSummary ? "desc" : "asc");
+  const [sortKey, setSortKey] = useState<SortKey>("symbol");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   function toggleExpand(symbol: string) {
     setExpandedSymbols((prev) => {
@@ -75,7 +77,7 @@ export default function PortfolioPage() {
 
   // Close any open Add / Buy-Sell form and reset row expansion/sort defaults when the selected
   // portfolio changes (incl. switching to/from Summary) — those forms act on a specific
-  // portfolio and shouldn't linger, and individual portfolios default to sorting by Stock A-Z.
+  // portfolio and shouldn't linger, and holdings always default to sorting by Stock A-Z.
   const [prevPortfolioId, setPrevPortfolioId] = useState(activePortfolioId);
   if (activePortfolioId !== prevPortfolioId) {
     setPrevPortfolioId(activePortfolioId);
@@ -83,8 +85,8 @@ export default function PortfolioPage() {
     setBulkUploading(false);
     setBuySellIntent(null);
     setExpandedSymbols(new Set());
-    setSortKey(isSummary ? "value" : "symbol");
-    setSortDir(isSummary ? "desc" : "asc");
+    setSortKey("symbol");
+    setSortDir("asc");
   }
 
   // Holdings in stocks beyond the small built-in mock set need their name/exchange
@@ -368,9 +370,12 @@ export default function PortfolioPage() {
                             </td>
                           )}
                           <td className="py-3">
-                            <Link href={`/dashboard/stocks/${r.p.symbol}`} className="font-semibold text-heading hover:text-brand">
-                              {r.p.symbol}
-                            </Link>
+                            <span className="inline-flex items-center gap-1.5">
+                              <Link href={`/dashboard/stocks/${r.p.symbol}`} className="font-semibold text-heading hover:text-brand">
+                                {r.p.symbol}
+                              </Link>
+                              {reports[r.p.symbol] && <RatingDot rating={reports[r.p.symbol].rating} />}
+                            </span>
                             <div className="text-xs text-foreground/50">{r.s?.name ?? "Unknown stock"}</div>
                           </td>
                           <td className="py-3 text-right">{r.p.quantity}</td>

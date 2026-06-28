@@ -105,6 +105,21 @@ export function RatingPill({ rating }: { rating: string }) {
   );
 }
 
+export function RatingDot({ rating }: { rating: string }) {
+  const styles: Record<string, string> = {
+    BUY: "bg-up",
+    HOLD: "bg-amber-500",
+    REDUCE: "bg-orange-500",
+    SELL: "bg-down",
+  };
+  return (
+    <span
+      className={clsx("inline-block h-2 w-2 rounded-full flex-none", styles[rating] ?? "bg-foreground/30")}
+      title={`Research report: ${rating}`}
+    />
+  );
+}
+
 export function PriceAreaChart({
   data,
   color = "#4f46e5",
