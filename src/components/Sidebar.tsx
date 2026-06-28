@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useProfile } from "@/lib/useProfile";
+import { LogoLockup } from "@/components/Logo";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, premium: false },
@@ -34,11 +35,8 @@ export default function Sidebar() {
 
   return (
     <aside className="hidden md:flex w-60 flex-none flex-col border-r border-line bg-surface">
-      <div className="h-16 flex items-center gap-2 px-6 font-bold text-lg text-heading tracking-tight">
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-white text-xs">
-          B17
-        </span>
-        Bot17
+      <div className="h-16 flex items-center px-6 text-heading">
+        <LogoLockup className="h-6" />
       </div>
       <nav className="flex-1 px-3 py-2 space-y-0.5">
         {NAV.map(({ href, label, icon: Icon, premium }) => {

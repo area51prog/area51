@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Quicksand } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/lib/theme";
@@ -14,7 +14,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const TITLE = "Bot17 — Indian Markets Investing";
+const brandFont = Quicksand({
+  variable: "--font-quicksand",
+  subsets: ["latin"],
+  weight: ["600", "700"],
+});
+
+const TITLE = "Alloqo — Indian Markets Investing";
 const DESCRIPTION =
   "Track Indian stocks, manage your portfolio, get AI equity research, and stay ahead of dividends.";
 
@@ -24,7 +30,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
-    siteName: "Bot17",
+    siteName: "Alloqo",
   },
   twitter: {
     card: "summary",
@@ -41,7 +47,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${brandFont.variable} h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />

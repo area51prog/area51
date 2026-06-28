@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { TrendingUp, ShieldCheck, CalendarClock, Sparkles } from "lucide-react";
+import { LogoLockup } from "@/components/Logo";
 
 export default function AuthShell({
   title,
@@ -15,10 +16,7 @@ export default function AuthShell({
       <div className="hidden lg:flex lg:w-1/2 bg-navy text-white flex-col justify-between p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(79,70,229,0.35),transparent_50%)]" />
         <div className="relative z-10">
-          <div className="flex items-center gap-2 text-lg font-bold tracking-tight">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand">B17</span>
-            Bot17
-          </div>
+          <LogoLockup className="h-7" />
         </div>
         <div className="relative z-10 space-y-8 max-w-md">
           <h2 className="text-3xl font-bold leading-tight">
@@ -31,14 +29,13 @@ export default function AuthShell({
             <Feature icon={<ShieldCheck size={18} />} text="Your data stays yours — manual portfolio entry, no brokerage linking required" />
           </div>
         </div>
-        <div className="relative z-10 text-xs text-white/40">© 2026 Bot17. For educational purposes only — not investment advice.</div>
+        <div className="relative z-10 text-xs text-white/40">© 2026 Alloqo. For educational purposes only — not investment advice.</div>
       </div>
 
       <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-sm">
-          <div className="lg:hidden flex items-center gap-2 text-lg font-bold tracking-tight text-heading mb-8">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-white">B17</span>
-            Bot17
+          <div className="lg:hidden flex items-center text-heading mb-8">
+            <LogoLockup className="h-7" />
           </div>
           <h1 className="text-2xl font-bold text-heading">{title}</h1>
           <p className="text-sm text-foreground/60 mt-1 mb-8">{subtitle}</p>

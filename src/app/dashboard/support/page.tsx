@@ -112,11 +112,11 @@ export default function SupportPage() {
 
       <Card title="Other ways to reach us">
         <a
-          href="mailto:sos@bot17.ai"
+          href="mailto:sos@alloqo.com"
           className="flex items-center gap-3 text-sm font-semibold text-foreground/70 hover:text-brand"
         >
           <Mail size={16} />
-          sos@bot17.ai
+          sos@alloqo.com
         </a>
       </Card>
     </div>

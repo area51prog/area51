@@ -21,7 +21,7 @@ function titleFor(pathname: string) {
   if (TITLES[pathname]) return TITLES[pathname];
   if (pathname.startsWith("/dashboard/stocks/")) return "Stock detail";
   if (pathname.startsWith("/dashboard/research/")) return "Research report";
-  return "Bot17";
+  return "Alloqo";
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

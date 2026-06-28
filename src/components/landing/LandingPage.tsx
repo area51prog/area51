@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
 import { Card, PriceAreaChart } from "@/components/ui";
+import { LogoLockup } from "@/components/Logo";
 
 type MarketSnapshotPoint = { date: string; value: number };
 
@@ -29,9 +30,8 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="flex items-center justify-between px-6 sm:px-12 py-6 max-w-6xl w-full mx-auto">
-        <div className="flex items-center gap-2 text-lg font-bold tracking-tight text-heading">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-white">B17</span>
-          Bot17
+        <div className="flex items-center text-heading">
+          <LogoLockup className="h-7" />
         </div>
         <nav className="flex items-center gap-4">
           <Link href="/login" className="text-sm font-medium text-foreground/70 hover:text-foreground">
@@ -53,7 +53,7 @@ export default function LandingPage() {
               Indian markets, tracked smarter.
             </h1>
             <p className="text-base text-foreground/60 mt-4 max-w-md">
-              Bot17 brings live NSE &amp; BSE pricing, AI-generated equity research, and a dividend calendar together
+              Alloqo brings live NSE &amp; BSE pricing, AI-generated equity research, and a dividend calendar together
               in one clean dashboard — no brokerage linking required.
             </p>
             <div className="flex items-center gap-3 mt-8">
@@ -144,7 +144,7 @@ export default function LandingPage() {
       </main>
 
       <footer className="text-center text-xs text-foreground/40 py-8 space-y-2">
-        <p>© 2026 Bot17. For educational purposes only — not investment advice.</p>
+        <p>© 2026 Alloqo. For educational purposes only — not investment advice.</p>
         <Link href="/privacy" className="text-foreground/40 hover:text-foreground/70 hover:underline">
           Privacy Policy
         </Link>

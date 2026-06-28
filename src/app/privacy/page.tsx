@@ -1,16 +1,16 @@
 import Link from "next/link";
+import { LogoLockup } from "@/components/Logo";
 
 export const metadata = {
-  title: "Privacy Policy — Bot17",
+  title: "Privacy Policy — Alloqo",
 };
 
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="flex items-center justify-between px-6 sm:px-12 py-6 max-w-3xl w-full mx-auto">
-        <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight text-heading">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-white">B17</span>
-          Bot17
+        <Link href="/" className="flex items-center text-heading">
+          <LogoLockup className="h-7" />
         </Link>
       </header>
 
@@ -22,9 +22,9 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-bold text-heading mb-2">What we collect</h2>
             <p>
-              When you create a Bot17 account we collect your name and email address to authenticate you and
+              When you create an Alloqo account we collect your name and email address to authenticate you and
               identify your account. Any portfolio, watchlist, or transaction data you enter is stored against
-              your account so it can be shown back to you — Bot17 does not require or request access to your
+              your account so it can be shown back to you — Alloqo does not require or request access to your
               brokerage account to use these features.
             </p>
           </section>
@@ -34,14 +34,14 @@ export default function PrivacyPage() {
             <p>
               If you choose to connect an Upstox account for live pricing, we store only the access tokens needed
               to fetch market quotes on your behalf. You can disconnect this at any time from your account
-              settings, and Bot17 continues to work with manually entered data if you never connect a broker.
+              settings, and Alloqo continues to work with manually entered data if you never connect a broker.
             </p>
           </section>
 
           <section>
             <h2 className="text-lg font-bold text-heading mb-2">How we use your data</h2>
             <p>
-              Your data is used solely to provide the Bot17 service to you — showing your watchlists, portfolio
+              Your data is used solely to provide the Alloqo service to you — showing your watchlists, portfolio
               performance, dividend calendar, and AI-generated research. We do not sell your personal data to
               third parties or use it for advertising.
             </p>
@@ -68,8 +68,8 @@ export default function PrivacyPage() {
             <h2 className="text-lg font-bold text-heading mb-2">Contact</h2>
             <p>
               Questions about this policy can be sent to{" "}
-              <a href="mailto:sos@bot17.ai" className="text-brand font-medium hover:underline">
-                sos@bot17.ai
+              <a href="mailto:sos@alloqo.com" className="text-brand font-medium hover:underline">
+                sos@alloqo.com
               </a>
               .
             </p>
@@ -78,7 +78,7 @@ export default function PrivacyPage() {
       </main>
 
       <footer className="text-center text-xs text-foreground/40 py-8">
-        © 2026 Bot17. For educational purposes only — not investment advice.
+        © 2026 Alloqo. For educational purposes only — not investment advice.
       </footer>
     </div>
   );
