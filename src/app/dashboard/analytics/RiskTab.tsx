@@ -19,10 +19,13 @@ export default function RiskTab({
 }) {
   const sectorAllocation = computeSectorAllocation(positions, priceBySymbol);
   const concentration = computeConcentration(positions, priceBySymbol);
-  const { history: historyBySymbol } = useHistoryMap(positions.map((p) => p.symbol));
+  const { history: historyBySymbol, loading: historyLoading } = useHistoryMap(positions.map((p) => p.symbol));
   const historyPerHolding = positions.map((p) => {
     const candles = historyBySymbol[p.symbol];
-    return candles?.length ? candles.map((c) => ({ date: c.date, price: c.close })) : getStock(p.symbol)?.history;
+    if (candles?.length) return candles.map((c) => ({ date: c.date, price: c.close }));
+    // Don't fall back to mock data while the real history is still loading -
+    // that just flashes synthetic numbers before the real ones arrive.
+    return historyLoading ? undefined : getStock(p.symbol)?.history;
   });
   const maxHistoryDays = historyPerHolding.reduce((max, h) => Math.max(max, h?.length ?? 0), 0);
   const volatility = positions
@@ -78,7 +81,9 @@ export default function RiskTab({
       </div>
 
       <Card title="Volatility per holding">
-        {volatility.length === 0 ? (
+        {historyLoading ? (
+          <p className="text-sm text-foreground/50 py-8 text-center">Loading price history…</p>
+        ) : volatility.length === 0 ? (
           <p className="text-sm text-foreground/50 py-8 text-center">
             Not enough price history for any current holding to estimate volatility yet.
           </p>
@@ -90,6 +95,7 @@ export default function RiskTab({
                   <CartesianGrid vertical={false} stroke="#eceef7" />
                   <XAxis dataKey="symbol" tick={{ fontSize: 11, fill: "#8b91a8" }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: "#8b91a8" }} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={(v) => [`${Number(v).toFixed(2)}%`, "Volatility"]} labelFormatter={(symbol) => symbol} />
                   <Bar dataKey="volatilityPct" fill="#4f46e5" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
