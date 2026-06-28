@@ -30,8 +30,11 @@ export default function TransactionsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("txnDate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
+  const currentMonthKey = new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
   const portfolioName = (id: string) => lists.find((l) => l.id === id)?.name ?? "—";
+
+  const isMonthCollapsed = (month: string) => collapsedMonths[month] ?? month !== currentMonthKey;
 
   const toggleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -161,7 +164,7 @@ export default function TransactionsPage() {
       ) : (
         <div className="space-y-4">
           {Object.entries(byMonth).map(([month, txns]) => {
-            const collapsed = !!collapsedMonths[month];
+            const collapsed = isMonthCollapsed(month);
             return (
               <Card key={month}>
                 <button
