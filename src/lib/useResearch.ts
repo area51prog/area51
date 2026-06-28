@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getResearch } from "./mock-data";
 import { ResearchReport } from "./types";
 import { createClient } from "./supabase/client";
+import { useAuth } from "./auth";
 
 export function useResearch(symbol: string) {
   const [report, setReport] = useState<ResearchReport | null>(null);
@@ -83,20 +84,27 @@ export function useResearch(symbol: string) {
 }
 
 export function useAllGeneratedReports() {
+  const { user } = useAuth();
   const [reports, setReports] = useState<Record<string, ResearchReport>>({});
 
   useEffect(() => {
+    if (!user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing results when logged out
+      setReports({});
+      return;
+    }
     const supabase = createClient();
     supabase
       .from("research_reports")
       .select("symbol, report")
+      .eq("generated_by", user.id)
       .then(({ data }) => {
         if (!data) return;
         const map: Record<string, ResearchReport> = {};
         for (const row of data) map[row.symbol] = row.report as unknown as ResearchReport;
         setReports(map);
       });
-  }, []);
+  }, [user]);
 
   return reports;
 }
