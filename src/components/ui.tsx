@@ -57,27 +57,35 @@ export function ChangeBadge({ value, percent }: { value?: number; percent: numbe
 const SOURCE_LABEL: Record<QuoteSource, string> = {
   upstox: "Upstox",
   finnhub: "Finnhub",
+  "upstox-stale": "Upstox (stale)",
   mock: "Mock",
 };
 
 const SOURCE_TITLE: Record<QuoteSource, string> = {
   upstox: "Live price via Upstox",
   finnhub: "Live price via Finnhub",
+  "upstox-stale": "Upstox token expired — showing the last price Upstox reported before it went down",
   mock: "Showing mock data — no live provider had data for this symbol",
 };
 
 export function LiveBadge({ live, source }: { live?: boolean; source?: QuoteSource }) {
   const resolved: QuoteSource = source ?? (live ? "finnhub" : "mock");
-  const isLive = resolved !== "mock";
+  const isLive = resolved === "upstox" || resolved === "finnhub";
+  const isStale = resolved === "upstox-stale";
   return (
     <span
       className={clsx(
         "inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide",
-        isLive ? "text-up" : "text-foreground/40"
+        isLive ? "text-up" : isStale ? "text-amber-500" : "text-foreground/40"
       )}
       title={SOURCE_TITLE[resolved]}
     >
-      <span className={clsx("h-1.5 w-1.5 rounded-full", isLive ? "bg-up animate-pulse" : "bg-foreground/30")} />
+      <span
+        className={clsx(
+          "h-1.5 w-1.5 rounded-full",
+          isLive ? "bg-up animate-pulse" : isStale ? "bg-amber-500" : "bg-foreground/30"
+        )}
+      />
       {SOURCE_LABEL[resolved]}
     </span>
   );

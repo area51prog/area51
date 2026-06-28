@@ -135,6 +135,15 @@ Source of truth: `src/lib/supabase/database.types.ts` (generated types).
 | `events` | `Json` | serialized `DividendEvent[]` |
 | `fetched_at` | `string` | default applied; cache TTL enforced in app logic (24h) |
 
+### `market_data_cache`
+| Column | Type | Notes |
+|---|---|---|
+| `cache_key` | `string` (PK) | namespaced key, e.g. `quote:INFY`, `full_quote:INFY`, `fundamentals:INFY`, `candles:NSE_INDEX\|Nifty 50:1Y` |
+| `payload` | `Json` | serialized last-known-good Upstox response (`LiveQuote`, `FullQuote`, `CompanyFundamentals`, or `CandlePoint[]`) |
+| `fetched_at` | `string` | default applied; timestamp of the successful Upstox call that produced `payload` |
+
+Write-through cache populated by every successful call in `src/lib/providers/upstox.ts`. Read back via `getStaleUpstox*` helpers (`src/lib/staleCache.ts`) when the live Upstox call fails — e.g. an expired OAuth token — so routes can serve the last real snapshot instead of falling straight to mock data. See §5 (`/api/quotes`, `/api/stocks/[symbol]/quote`, `/api/stocks/[symbol]/fundamentals`, `/api/market-snapshot`) for the stale-fallback response shape.
+
 ### `notifications`
 | Column | Type | Notes |
 |---|---|---|
@@ -176,7 +185,7 @@ All user-scoped tables (`watchlists`, `watchlist`, `portfolios`, `portfolio_hold
 ```sql
 auth.uid() = user_id
 ```
-on both `USING` and `WITH CHECK` clauses. `research_reports`, `dividend_cache`, and `app_settings` are shared/cached data, not user-scoped.
+on both `USING` and `WITH CHECK` clauses. `research_reports`, `dividend_cache`, `market_data_cache`, and `app_settings` are shared/cached data, not user-scoped — readable/writable by any authenticated user.
 
 ---
 
@@ -188,14 +197,14 @@ All routes live under `src/app/api/`. Responses generally follow `{ ok: boolean,
 
 | Route | Method | Params | Response |
 |---|---|---|---|
-| `/api/quotes` | GET | `symbols=INFY,TCS,HDFCBANK` | `{ ok, quotes: {symbol: LiveQuote}, sources: {symbol: QuoteSource} }` |
-| `/api/stocks/[symbol]/quote` | GET | path: `symbol` | `{ ok, quote: FullQuote }` |
+| `/api/quotes` | GET | `symbols=INFY,TCS,HDFCBANK` | `{ ok, quotes: {symbol: LiveQuote}, sources: {symbol: QuoteSource}, staleAt: {symbol: string} }` |
+| `/api/stocks/[symbol]/quote` | GET | path: `symbol` | `{ ok, quote: FullQuote \| null, stale: boolean, staleAt?: string }` |
 | `/api/stocks/[symbol]/history` | GET | `range=1D\|1W\|1M\|1Y\|5Y` (default `1Y`) | `{ ok, candles: CandlePoint[] }` |
-| `/api/stocks/[symbol]/fundamentals` | GET | path: `symbol` | `{ ok, fundamentals: CompanyFundamentals }` |
+| `/api/stocks/[symbol]/fundamentals` | GET | path: `symbol` | `{ ok, fundamentals: CompanyFundamentals \| null, stale: boolean, staleAt?: string }` |
 | `/api/stocks/[symbol]/pe-history` | GET | path: `symbol` | `{ ok, peHistory: PeHistoryData }` |
-| `/api/market-snapshot` | GET | `range=1D\|1W\|1M\|1Y\|5Y` (default `1M`) | `{ ok, candles: {date, value}[] }` (Nifty 50) |
+| `/api/market-snapshot` | GET | `range=1D\|1W\|1M\|1Y\|5Y` (default `1M`) | `{ ok, mock: boolean, stale: boolean, staleAt?: string, points: {date, value}[] }` (Nifty 50) |
 
-`QuoteSource` is `"upstox" | "finnhub" | "mock"` — Upstox is tried first (NSE-native), Finnhub as fallback (US tickers only on free tier), mock data otherwise.
+`QuoteSource` is `"upstox" | "finnhub" | "upstox-stale" | "mock"`. Fallback order: live Upstox (NSE-native) → live Finnhub (US tickers only on free tier, `/api/quotes` only) → last-known-good Upstox snapshot from `market_data_cache` (e.g. when the OAuth token has expired) → mock data. `staleAt` carries the timestamp of the cached snapshot so the UI can show "Stale · Upstox" badges instead of silently serving old data as if it were live (see `LiveBadge` in `src/components/ui.tsx`).
 
 ### Equity Research (AI-generated)
 
@@ -340,7 +349,7 @@ No global state library — React Context (`AuthContext`) plus domain-specific c
 
 | File | Functions | Notes |
 |---|---|---|
-| `upstox.ts` | `getUpstoxQuotes`, `getUpstoxFullQuote`, `getUpstoxHistoricalCandles`, `getUpstoxFundamentals`, `getPeHistory` | Primary NSE provider; requires an active OAuth token (per-user, expires daily 3:30am IST); no app-level caching (live calls) |
+| `upstox.ts` | `getUpstoxQuotes`, `getUpstoxFullQuote`, `getUpstoxHistoricalCandles`, `getUpstoxFundamentals`, `getPeHistory`, `getStaleUpstoxQuotes`, `getStaleUpstoxFullQuote`, `getStaleUpstoxCandles`, `getStaleUpstoxFundamentals` | Primary NSE provider; requires an active OAuth token (per-user, expires daily 3:30am IST); live calls, but every successful response is write-through cached into `market_data_cache` (see `src/lib/staleCache.ts`) so the `getStaleUpstox*` helpers can serve the last good snapshot if the live call fails |
 | `finnhub.ts` | `getFinnhubQuotes` | Fallback; free tier covers US tickers only |
 | `instruments.ts` | `searchInstruments`, `lookupInstrument`, `getInstrumentKey`, `getInstrumentKeys`, `getIsin`, `lookupByInstrumentKey` | Symbol search/lookup against the Upstox instrument master |
 
@@ -352,7 +361,7 @@ Source: `src/lib/types.ts`.
 
 ```ts
 type Exchange = "NSE" | "BSE";
-type QuoteSource = "upstox" | "finnhub" | "mock";
+type QuoteSource = "upstox" | "finnhub" | "upstox-stale" | "mock";
 
 interface LiveQuote { price; change; changePercent; high; low; prevClose }
 interface FullQuote { price; prevClose; high; low; open; volume; averagePrice; netChange;

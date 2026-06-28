@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { getValidUpstoxAccessToken } from "@/lib/upstoxToken";
 import { getInstrumentKeys, getInstrumentKey, getIsin, lookupByInstrumentKey } from "@/lib/providers/instruments";
+import { readStaleCache, readStaleCacheMany, writeStaleCache, writeStaleCacheMany, StaleEntry } from "@/lib/staleCache";
 import { Database } from "@/lib/supabase/database.types";
 import {
   LiveQuote,
@@ -76,10 +77,32 @@ export async function getUpstoxQuotes(
         prevClose,
       };
     }
+
+    await writeStaleCacheMany(
+      supabase,
+      Object.entries(result).map(([symbol, quote]) => ({ cacheKey: `quote:${symbol}`, payload: quote }))
+    );
+
     return result;
   } catch {
     return {};
   }
+}
+
+// Last-known-good Upstox quotes, served when the token has expired or Upstox
+// (and Finnhub) had nothing — keeps the dashboard showing real numbers
+// instead of jumping straight to mock data.
+export async function getStaleUpstoxQuotes(
+  supabase: SupabaseClient<Database>,
+  symbols: string[]
+): Promise<Record<string, StaleEntry<LiveQuote>>> {
+  const cached = await readStaleCacheMany<LiveQuote>(supabase, symbols.map((s) => `quote:${s}`));
+  const result: Record<string, StaleEntry<LiveQuote>> = {};
+  for (const symbol of symbols) {
+    const entry = cached.get(`quote:${symbol}`);
+    if (entry) result[symbol] = entry;
+  }
+  return result;
 }
 
 interface FullQuoteEntry {
@@ -126,7 +149,7 @@ export async function getUpstoxFullQuote(
     const entry = Object.values(body.data)[0];
     if (!entry) return null;
 
-    return {
+    const quote: FullQuote = {
       price: entry.last_price,
       prevClose: entry.ohlc.close,
       high: entry.ohlc.high,
@@ -145,9 +168,19 @@ export async function getUpstoxFullQuote(
       },
       timestamp: entry.timestamp,
     };
+
+    await writeStaleCache(supabase, `full_quote:${symbol}`, quote);
+    return quote;
   } catch {
     return null;
   }
+}
+
+export async function getStaleUpstoxFullQuote(
+  supabase: SupabaseClient<Database>,
+  symbol: string
+): Promise<StaleEntry<FullQuote> | null> {
+  return readStaleCache<FullQuote>(supabase, `full_quote:${symbol}`);
 }
 
 function isoDate(d: Date) {
@@ -231,10 +264,22 @@ export async function getUpstoxHistoricalCandles(
       candleCache.set(cacheKey, { candles, fetchedAt: Date.now() });
     }
 
+    if (candles.length > 0) {
+      await writeStaleCache(supabase, `candles:${symbol}:${range}`, candles);
+    }
+
     return candles;
   } catch {
     return [];
   }
+}
+
+export async function getStaleUpstoxCandles(
+  supabase: SupabaseClient<Database>,
+  symbol: string,
+  range: TrendRange
+): Promise<StaleEntry<CandlePoint[]> | null> {
+  return readStaleCache<CandlePoint[]>(supabase, `candles:${symbol}:${range}`);
 }
 
 interface FundamentalsApiEntry {
@@ -356,7 +401,16 @@ export async function getUpstoxFundamentals(
 
   if (!profile && keyRatios.length === 0 && shareholding.length === 0) return null;
 
-  return { profile, keyRatios, shareholding, corporateActions, competitors };
+  const fundamentals: CompanyFundamentals = { profile, keyRatios, shareholding, corporateActions, competitors };
+  await writeStaleCache(supabase, `fundamentals:${symbol}`, fundamentals);
+  return fundamentals;
+}
+
+export async function getStaleUpstoxFundamentals(
+  supabase: SupabaseClient<Database>,
+  symbol: string
+): Promise<StaleEntry<CompanyFundamentals> | null> {
+  return readStaleCache<CompanyFundamentals>(supabase, `fundamentals:${symbol}`);
 }
 
 // Upstox doesn't document a fixed enum of key-ratio names, so find the P/E

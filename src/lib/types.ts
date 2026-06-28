@@ -1,6 +1,6 @@
 export type Exchange = "NSE" | "BSE";
 
-export type QuoteSource = "upstox" | "finnhub" | "mock";
+export type QuoteSource = "upstox" | "finnhub" | "upstox-stale" | "mock";
 
 export interface LiveQuote {
   price: number;

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getUpstoxQuotes } from "@/lib/providers/upstox";
+import { getUpstoxQuotes, getStaleUpstoxQuotes } from "@/lib/providers/upstox";
 import { getFinnhubQuotes } from "@/lib/providers/finnhub";
 import { createClient } from "@/lib/supabase/server";
 import { LiveQuote, QuoteSource } from "@/lib/types";
@@ -36,9 +36,23 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Neither Upstox nor Finnhub had data — most likely an expired Upstox
+  // token. Fall back to the last quote Upstox successfully reported rather
+  // than jumping straight to mock numbers.
+  const stillMissing = symbols.filter((s) => !quotes[s]);
+  const staleAt: Record<string, string> = {};
+  if (stillMissing.length > 0) {
+    const staleQuotes = await getStaleUpstoxQuotes(supabase, stillMissing);
+    for (const symbol of Object.keys(staleQuotes)) {
+      quotes[symbol] = staleQuotes[symbol].payload;
+      sources[symbol] = "upstox-stale";
+      staleAt[symbol] = staleQuotes[symbol].fetchedAt;
+    }
+  }
+
   for (const symbol of symbols) {
     if (!sources[symbol]) sources[symbol] = "mock";
   }
 
-  return Response.json({ ok: true, quotes, sources });
+  return Response.json({ ok: true, quotes, sources, staleAt });
 }

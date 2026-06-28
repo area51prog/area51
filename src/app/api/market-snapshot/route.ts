@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getUpstoxHistoricalCandles, TrendRange } from "@/lib/providers/upstox";
+import { getUpstoxHistoricalCandles, getStaleUpstoxCandles, TrendRange } from "@/lib/providers/upstox";
 
 const NIFTY_50_SYMBOL = "NSE_INDEX|Nifty 50";
 
@@ -51,12 +51,19 @@ export async function GET(request: Request) {
   try {
     const supabase = await createClient();
     const candles = await getUpstoxHistoricalCandles(supabase, NIFTY_50_SYMBOL, range);
-    if (candles.length === 0) {
-      return Response.json({ ok: true, mock: true, points: MOCK_CANDLES[range] });
+    if (candles.length > 0) {
+      const points = candles.map((c) => ({ date: c.date, value: c.close }));
+      return Response.json({ ok: true, mock: false, stale: false, points });
     }
-    const points = candles.map((c) => ({ date: c.date, value: c.close }));
-    return Response.json({ ok: true, mock: false, points });
+
+    const stale = await getStaleUpstoxCandles(supabase, NIFTY_50_SYMBOL, range);
+    if (stale && stale.payload.length > 0) {
+      const points = stale.payload.map((c) => ({ date: c.date, value: c.close }));
+      return Response.json({ ok: true, mock: false, stale: true, staleAt: stale.fetchedAt, points });
+    }
+
+    return Response.json({ ok: true, mock: true, stale: false, points: MOCK_CANDLES[range] });
   } catch {
-    return Response.json({ ok: true, mock: true, points: MOCK_CANDLES[range] });
+    return Response.json({ ok: true, mock: true, stale: false, points: MOCK_CANDLES[range] });
   }
 }

@@ -52,9 +52,11 @@ export default function StockDetailPage() {
   const [instrument, setInstrument] = useState<InstrumentInfo | null | undefined>(undefined);
   const [apiConnected, setApiConnected] = useState(true);
   const [quote, setQuote] = useState<FullQuote | null | undefined>(undefined);
+  const [quoteStale, setQuoteStale] = useState<string | null>(null);
   const [yearCandles, setYearCandles] = useState<CandlePoint[]>([]);
   const [trendCandles, setTrendCandles] = useState<CandlePoint[] | undefined>(undefined);
   const [fundamentals, setFundamentals] = useState<CompanyFundamentals | null | undefined>(undefined);
+  const [fundamentalsStale, setFundamentalsStale] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +94,10 @@ export default function StockDetailPage() {
       try {
         const res = await fetch(`/api/stocks/${encodeURIComponent(symbol)}/quote`);
         const body = await res.json();
-        if (!cancelled) setQuote(body.ok ? body.quote : null);
+        if (!cancelled) {
+          setQuote(body.ok ? body.quote : null);
+          setQuoteStale(body.ok && body.stale ? body.staleAt : null);
+        }
       } catch {
         if (!cancelled) setQuote(null);
       }
@@ -158,7 +163,10 @@ export default function StockDetailPage() {
     fetch(`/api/stocks/${encodeURIComponent(symbol)}/fundamentals`)
       .then((res) => res.json())
       .then((body) => {
-        if (!cancelled) setFundamentals(body.ok ? body.fundamentals : null);
+        if (!cancelled) {
+          setFundamentals(body.ok ? body.fundamentals : null);
+          setFundamentalsStale(body.ok && body.stale ? body.staleAt : null);
+        }
       })
       .catch(() => {
         if (!cancelled) setFundamentals(null);
@@ -193,9 +201,18 @@ export default function StockDetailPage() {
               <>
                 <span className="text-3xl font-bold text-heading">₹{formatINR(quote.price)}</span>
                 <ChangeBadge value={quote.netChange} percent={pct} />
-                <span className="text-[11px] font-semibold text-up flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-up" /> Live · Upstox
-                </span>
+                {quoteStale ? (
+                  <span
+                    className="text-[11px] font-semibold text-amber-500 flex items-center gap-1.5"
+                    title={`Upstox token expired — showing the last price reported on ${new Date(quoteStale).toLocaleString("en-IN")}`}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Stale · Upstox
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-semibold text-up flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-up" /> Live · Upstox
+                  </span>
+                )}
               </>
             ) : quote === undefined ? (
               <span className="text-sm text-foreground/50">Loading price…</span>
@@ -262,7 +279,7 @@ export default function StockDetailPage() {
         />
       )}
 
-      {tab === "fundamentals" && <FundamentalsTab fundamentals={fundamentals} />}
+      {tab === "fundamentals" && <FundamentalsTab fundamentals={fundamentals} staleAt={fundamentalsStale} />}
     </div>
   );
 }
@@ -425,7 +442,13 @@ function TrendsTab({
   );
 }
 
-function FundamentalsTab({ fundamentals }: { fundamentals: CompanyFundamentals | null | undefined }) {
+function FundamentalsTab({
+  fundamentals,
+  staleAt,
+}: {
+  fundamentals: CompanyFundamentals | null | undefined;
+  staleAt: string | null;
+}) {
   if (fundamentals === undefined) {
     return (
       <Card>
@@ -449,6 +472,11 @@ function FundamentalsTab({ fundamentals }: { fundamentals: CompanyFundamentals |
 
   return (
     <div className="space-y-4">
+      {staleAt && (
+        <p className="text-xs font-medium text-amber-500">
+          Upstox token expired — showing fundamentals last fetched {new Date(staleAt).toLocaleString("en-IN")}.
+        </p>
+      )}
       {profile && (
         <Card title="Company profile">
           <p className="text-sm text-foreground/60 leading-relaxed mb-3">{profile.description}</p>
