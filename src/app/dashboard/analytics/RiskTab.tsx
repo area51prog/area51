@@ -3,6 +3,7 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Position } from "@/lib/usePortfolio";
 import { getStock } from "@/lib/mock-data";
+import { useHistoryMap } from "@/lib/useHistoryMap";
 import { computeSectorAllocation, computeConcentration, computeVolatilityPerHolding, VolatilityRow } from "@/lib/analytics";
 import { formatINRCompact } from "@/lib/format";
 import { Card, Stat } from "@/components/ui";
@@ -18,8 +19,14 @@ export default function RiskTab({
 }) {
   const sectorAllocation = computeSectorAllocation(positions, priceBySymbol);
   const concentration = computeConcentration(positions, priceBySymbol);
+  const { history: historyBySymbol } = useHistoryMap(positions.map((p) => p.symbol));
+  const historyPerHolding = positions.map((p) => {
+    const candles = historyBySymbol[p.symbol];
+    return candles?.length ? candles.map((c) => ({ date: c.date, price: c.close })) : getStock(p.symbol)?.history;
+  });
+  const maxHistoryDays = historyPerHolding.reduce((max, h) => Math.max(max, h?.length ?? 0), 0);
   const volatility = positions
-    .map((p) => computeVolatilityPerHolding(p.symbol, getStock(p.symbol)?.history))
+    .map((p, i) => computeVolatilityPerHolding(p.symbol, historyPerHolding[i]))
     .filter((v): v is VolatilityRow & { volatilityPct: number } => v.volatilityPct !== null);
 
   if (positions.length === 0) {
@@ -91,6 +98,9 @@ export default function RiskTab({
               <p className="text-xs text-foreground/40 mt-2">
                 {positions.length - volatility.length} holding(s) omitted — limited price history available.
               </p>
+            )}
+            {maxHistoryDays > 0 && (
+              <p className="text-xs text-foreground/40 mt-2">Based on up to {maxHistoryDays} days of trading activity.</p>
             )}
           </>
         )}

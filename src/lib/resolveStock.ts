@@ -1,7 +1,8 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { getStock } from "@/lib/mock-data";
 import { lookupInstrument } from "@/lib/providers/instruments";
-import { getUpstoxFullQuote, getUpstoxHistoricalCandles, getUpstoxFundamentals } from "@/lib/providers/upstox";
+import { getUpstoxFullQuote, getUpstoxFundamentals } from "@/lib/providers/upstox";
+import { ensureGoldenHistory } from "@/lib/priceHistory";
 import { Database } from "@/lib/supabase/database.types";
 import { Stock } from "@/lib/types";
 
@@ -24,7 +25,7 @@ export async function resolveStock(
   if (!quote) return null;
 
   const [candles, fundamentals] = await Promise.all([
-    getUpstoxHistoricalCandles(supabase, symbol, "1Y"),
+    ensureGoldenHistory(supabase, symbol),
     getUpstoxFundamentals(supabase, symbol),
   ]);
 

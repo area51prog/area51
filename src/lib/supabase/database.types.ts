@@ -202,6 +202,39 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_price_history: {
+        Row: {
+          close: number
+          fetched_at: string
+          high: number
+          low: number
+          open: number
+          symbol: string
+          trade_date: string
+          volume: number
+        }
+        Insert: {
+          close: number
+          fetched_at?: string
+          high: number
+          low: number
+          open: number
+          symbol: string
+          trade_date: string
+          volume?: number
+        }
+        Update: {
+          close?: number
+          fetched_at?: string
+          high?: number
+          low?: number
+          open?: number
+          symbol?: string
+          trade_date?: string
+          volume?: number
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           created_at: string
