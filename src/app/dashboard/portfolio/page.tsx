@@ -234,7 +234,7 @@ export default function PortfolioPage() {
 
       {adding && (
         <AddHoldingForm
-          onAdd={buyHolding}
+          onAdd={bulkAddHoldings}
           onDone={() => setAdding(false)}
         />
       )}
@@ -393,23 +393,170 @@ export default function PortfolioPage() {
   );
 }
 
+let holdingRowSeq = 0;
+
+interface HoldingRowState {
+  id: number;
+  symbol: string;
+  name: string;
+  quantity: string;
+  avgPrice: string;
+  buyDate: string;
+}
+
+function newHoldingRow(): HoldingRowState {
+  return {
+    id: ++holdingRowSeq,
+    symbol: "",
+    name: "",
+    quantity: "",
+    avgPrice: "",
+    buyDate: new Date().toISOString().slice(0, 10),
+  };
+}
+
 function AddHoldingForm({
   onAdd,
   onDone,
 }: {
-  onAdd: (input: { symbol: string; quantity: number; avgPrice: number; buyDate: string }) => Promise<{ error?: string }>;
+  onAdd: (inputs: NewHolding[]) => Promise<{ inserted: number; error?: string }>;
   onDone: () => void;
 }) {
-  const [symbol, setSymbol] = useState("");
-  const [name, setName] = useState("");
+  const [rows, setRows] = useState<HoldingRowState[]>(() => [newHoldingRow()]);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  function updateRow(id: number, patch: Partial<HoldingRowState>) {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  function removeRow(id: number) {
+    setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.id !== id) : prev));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const inputs: NewHolding[] = [];
+    for (const r of rows) {
+      const qty = Number(r.quantity);
+      const price = Number(r.avgPrice);
+      if (!r.symbol || !qty || qty <= 0 || !price || price < 0 || !r.buyDate) {
+        setError("Search for and select a stock for every row, then enter a valid quantity, average price, and buy date.");
+        return;
+      }
+      inputs.push({ symbol: r.symbol, quantity: qty, avgPrice: price, buyDate: r.buyDate });
+    }
+    setError("");
+    setSubmitting(true);
+    const { error: addError } = await onAdd(inputs);
+    setSubmitting(false);
+    if (addError) {
+      setError(addError);
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <Card>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {rows.map((row) => (
+          <div key={row.id} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 items-end">
+            <HoldingStockSearch
+              symbol={row.symbol}
+              name={row.name}
+              onSelect={(symbol, name) => updateRow(row.id, { symbol, name })}
+              onClear={() => updateRow(row.id, { symbol: "", name: "" })}
+            />
+            <label className="block">
+              <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Quantity</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={row.quantity}
+                onChange={(e) => updateRow(row.id, { quantity: e.target.value })}
+                placeholder="e.g. 25"
+                className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Avg. price (₹)</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={row.avgPrice}
+                onChange={(e) => updateRow(row.id, { avgPrice: e.target.value })}
+                placeholder="e.g. 1295.40"
+                className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Buy date</span>
+              <input
+                type="date"
+                value={row.buyDate}
+                onChange={(e) => updateRow(row.id, { buyDate: e.target.value })}
+                className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => removeRow(row.id)}
+              disabled={rows.length === 1}
+              title="Remove row"
+              className="text-foreground/40 hover:text-down disabled:opacity-30 disabled:hover:text-foreground/40 mb-2.5 sm:mb-0"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={() => setRows((prev) => [...prev, newHoldingRow()])}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline"
+        >
+          <Plus size={14} /> Add another row
+        </button>
+
+        {error && <p className="text-sm text-down">{error}</p>}
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 disabled:opacity-60"
+          >
+            {submitting ? "Adding…" : rows.length > 1 ? `Add ${rows.length} holdings` : "Add holding"}
+          </button>
+          <button
+            type="button"
+            onClick={onDone}
+            className="rounded-lg border border-line text-sm font-semibold px-4 py-2 hover:bg-background"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function HoldingStockSearch({
+  symbol,
+  name,
+  onSelect,
+  onClear,
+}: {
+  symbol: string;
+  name: string;
+  onSelect: (symbol: string, name: string) => void;
+  onClear: () => void;
+}) {
   const [query, setQuery] = useState("");
   const [candidates, setCandidates] = useState<SymbolResult[]>([]);
   const abortRef = useRef<AbortController | null>(null);
-  const [quantity, setQuantity] = useState("");
-  const [avgPrice, setAvgPrice] = useState("");
-  const [buyDate, setBuyDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const q = query.trim();
@@ -435,116 +582,41 @@ function AddHoldingForm({
     return () => clearTimeout(timer);
   }, [query]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const qty = Number(quantity);
-    const price = Number(avgPrice);
-    if (!symbol || !qty || qty <= 0 || !price || price < 0 || !buyDate) {
-      setError("Search for and select a stock, then enter a valid quantity, average price, and buy date.");
-      return;
-    }
-    setError("");
-    setSubmitting(true);
-    const { error: addError } = await onAdd({ symbol, quantity: qty, avgPrice: price, buyDate });
-    setSubmitting(false);
-    if (addError) {
-      setError(addError);
-      return;
-    }
-    onDone();
-  }
-
   return (
-    <Card>
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-        <label className="block relative">
-          <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Stock</span>
-          <input
-            value={symbol ? `${symbol} — ${name}` : query}
-            onChange={(e) => {
-              setSymbol("");
-              setName("");
-              setQuery(e.target.value);
-            }}
-            placeholder="Search stocks to add…"
-            className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-          />
-          {!symbol && candidates.length > 0 && (
-            <div className="absolute top-full mt-1 left-0 w-full bg-surface border border-line rounded-lg shadow-lg z-30 max-h-56 overflow-y-auto">
-              {candidates.map((c) => (
-                <button
-                  key={c.symbol}
-                  type="button"
-                  onClick={() => {
-                    setSymbol(c.symbol);
-                    setName(c.name);
-                    setQuery("");
-                    setCandidates([]);
-                  }}
-                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-background text-left"
-                >
-                  <span>
-                    <span className="font-semibold text-heading">{c.symbol}</span>{" "}
-                    <span className="text-foreground/50">{c.name}</span>
-                  </span>
-                  <span className="text-foreground/40 text-xs">{c.exchange}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </label>
-        <label className="block">
-          <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Quantity</span>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            placeholder="e.g. 25"
-            className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-          />
-        </label>
-        <label className="block">
-          <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Avg. price (₹)</span>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={avgPrice}
-            onChange={(e) => setAvgPrice(e.target.value)}
-            placeholder="e.g. 1295.40"
-            className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-          />
-        </label>
-        <label className="block">
-          <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Buy date</span>
-          <input
-            type="date"
-            value={buyDate}
-            onChange={(e) => setBuyDate(e.target.value)}
-            className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-          />
-        </label>
-        {error && <p className="text-sm text-down sm:col-span-4">{error}</p>}
-        <div className="sm:col-span-4 flex gap-2">
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 disabled:opacity-60"
-          >
-            {submitting ? "Adding…" : "Add holding"}
-          </button>
-          <button
-            type="button"
-            onClick={onDone}
-            className="rounded-lg border border-line text-sm font-semibold px-4 py-2 hover:bg-background"
-          >
-            Cancel
-          </button>
+    <label className="block relative">
+      <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Stock</span>
+      <input
+        value={symbol ? `${symbol} — ${name}` : query}
+        onChange={(e) => {
+          onClear();
+          setQuery(e.target.value);
+        }}
+        placeholder="Search stocks to add…"
+        className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+      />
+      {!symbol && candidates.length > 0 && (
+        <div className="absolute top-full mt-1 left-0 w-full bg-surface border border-line rounded-lg shadow-lg z-30 max-h-56 overflow-y-auto">
+          {candidates.map((c) => (
+            <button
+              key={c.symbol}
+              type="button"
+              onClick={() => {
+                onSelect(c.symbol, c.name);
+                setQuery("");
+                setCandidates([]);
+              }}
+              className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-background text-left"
+            >
+              <span>
+                <span className="font-semibold text-heading">{c.symbol}</span>{" "}
+                <span className="text-foreground/50">{c.name}</span>
+              </span>
+              <span className="text-foreground/40 text-xs">{c.exchange}</span>
+            </button>
+          ))}
         </div>
-      </form>
-    </Card>
+      )}
+    </label>
   );
 }
 
