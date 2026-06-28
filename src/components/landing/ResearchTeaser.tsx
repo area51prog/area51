@@ -9,7 +9,7 @@ export default function ResearchTeaser() {
   return (
     <div className="rounded-2xl bg-navy p-8 sm:p-10 grid lg:grid-cols-2 gap-8 items-center">
       <div>
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand bg-white/10 px-3 py-1 rounded-full">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white bg-white/10 px-3 py-1 rounded-full">
           <Sparkles size={13} /> AI equity research
         </span>
         <h2 className="text-2xl sm:text-3xl font-bold text-white mt-4">Ask anything about a stock. Get a real answer.</h2>

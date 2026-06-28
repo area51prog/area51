@@ -1,54 +1,79 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { CalendarClock, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
-import { Card, PriceAreaChart } from "@/components/ui";
+import { useRouter } from "next/navigation";
+import { CalendarClock, ChevronDown, LogOut, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
+import { Card } from "@/components/ui";
 import { LogoLockup } from "@/components/Logo";
+import { useAuth } from "@/lib/auth";
 import MarketTicker from "@/components/landing/MarketTicker";
-import SectorOverview from "@/components/landing/SectorOverview";
+import NavSearch from "@/components/landing/NavSearch";
 import MarketMovers from "@/components/landing/MarketMovers";
 import ResearchTeaser from "@/components/landing/ResearchTeaser";
 import DividendTeaser from "@/components/landing/DividendTeaser";
 
-type MarketSnapshotPoint = { date: string; value: number };
-
 export default function LandingPage() {
-  const [points, setPoints] = useState<MarketSnapshotPoint[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/market-snapshot")
-      .then((res) => res.json())
-      .then((body) => {
-        if (cancelled) return;
-        setPoints(body.points ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setPoints([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { user, loading, logout } = useAuth();
+  const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <MarketTicker />
-      <header className="flex items-center justify-between px-6 sm:px-12 py-6 max-w-6xl w-full mx-auto">
-        <div className="flex items-center text-heading">
+      <header className="flex items-center justify-between gap-4 px-6 sm:px-12 py-6 max-w-6xl w-full mx-auto">
+        <div className="flex items-center text-heading flex-none">
           <LogoLockup className="h-7" />
         </div>
-        <nav className="flex items-center gap-4">
-          <Link href="/login" className="text-sm font-medium text-foreground/70 hover:text-foreground">
-            Log in
-          </Link>
-          <Link
-            href="/signup"
-            className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 transition-colors"
-          >
-            Sign up
-          </Link>
+        <div className="hidden sm:block flex-1 max-w-xs">
+          <NavSearch />
+        </div>
+        <nav className="flex items-center gap-4 flex-none">
+          {!loading && user ? (
+            <div className="relative">
+              <button
+                onClick={() => setMenuOpen((o) => !o)}
+                className="flex items-center gap-1.5 text-sm font-medium text-foreground/70 hover:text-foreground"
+              >
+                Account
+                <ChevronDown size={14} />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-44 bg-surface border border-line rounded-lg shadow-lg z-30 overflow-hidden">
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-3.5 py-2.5 text-sm hover:bg-background"
+                  >
+                    Dashboard
+                  </Link>
+                  <button
+                    onClick={async () => {
+                      setMenuOpen(false);
+                      await logout();
+                      router.push("/");
+                    }}
+                    className="w-full flex items-center gap-2 px-3.5 py-2.5 text-sm text-down hover:bg-background text-left"
+                  >
+                    <LogOut size={14} />
+                    Log out
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <Link href="/login" className="text-sm font-medium text-foreground/70 hover:text-foreground">
+                Log in
+              </Link>
+              <Link
+                href="/signup"
+                className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 transition-colors"
+              >
+                Sign up
+              </Link>
+            </>
+          )}
         </nav>
       </header>
 
@@ -84,29 +109,9 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <Card title="Today's market" className="lg:ml-auto w-full">
-            {points === null ? (
-              <div className="h-[220px] flex items-center justify-center text-sm text-foreground/40">
-                Loading market data…
-              </div>
-            ) : points.length === 0 ? (
-              <div className="h-[220px] flex items-center justify-center text-sm text-foreground/40">
-                Market data unavailable
-              </div>
-            ) : (
-              <PriceAreaChart
-                data={points}
-                valueLabel="Nifty 50"
-                valueFormat={(v) => v.toFixed(2)}
-              />
-            )}
-          </Card>
-        </section>
-
-        <SectorOverview />
-
-        <section className="max-w-6xl mx-auto px-6 sm:px-12 pb-16">
-          <MarketMovers />
+          <div className="lg:ml-auto w-full">
+            <MarketMovers />
+          </div>
         </section>
 
         <section className="max-w-6xl mx-auto px-6 sm:px-12 pb-16">
@@ -161,11 +166,13 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="text-center text-xs text-foreground/40 py-8 space-y-2">
-        <p>© 2026 Alloqo. For educational purposes only — not investment advice.</p>
-        <Link href="/privacy" className="text-foreground/40 hover:text-foreground/70 hover:underline">
-          Privacy Policy
-        </Link>
+      <footer className="bg-navy text-center text-xs text-white/50 py-6">
+        <p>
+          © 2026 Alloqo. Not an Investment Advice.{" "}
+          <Link href="/privacy" className="text-white/50 hover:text-white hover:underline">
+            Privacy Policy
+          </Link>
+        </p>
       </footer>
     </div>
   );
