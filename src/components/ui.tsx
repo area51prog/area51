@@ -126,17 +126,23 @@ export function PriceAreaChart({
   height = 220,
   valueLabel = "Price",
   valueFormat = (v: number) => `₹${v.toFixed(2)}`,
+  yAxisFormatter,
+  yAxisLabel,
+  leftMargin = -16,
 }: {
   data: { date: string; value: number }[];
   color?: string;
   height?: number;
   valueLabel?: string;
   valueFormat?: (v: number) => string;
+  yAxisFormatter?: (v: number) => string;
+  yAxisLabel?: string;
+  leftMargin?: number;
 }) {
   const gradId = `grad-${color.replace("#", "")}`;
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 5, right: 8, left: -16, bottom: 0 }}>
+      <AreaChart data={data} margin={{ top: 5, right: 8, left: leftMargin, bottom: 0 }}>
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.35} />
@@ -145,7 +151,18 @@ export function PriceAreaChart({
         </defs>
         <CartesianGrid vertical={false} stroke="#eceef7" />
         <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#8b91a8" }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontSize: 11, fill: "#8b91a8" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
+        <YAxis
+          tick={{ fontSize: 11, fill: "#8b91a8" }}
+          axisLine={false}
+          tickLine={false}
+          domain={["auto", "auto"]}
+          tickFormatter={yAxisFormatter}
+          label={
+            yAxisLabel
+              ? { value: yAxisLabel, angle: -90, position: "insideLeft", style: { fontSize: 11, fill: "#8b91a8" } }
+              : undefined
+          }
+        />
         <Tooltip
           formatter={(v) => [valueFormat(Number(v)), valueLabel]}
           contentStyle={{ borderRadius: 8, border: "1px solid #e7e9f3", fontSize: 12 }}

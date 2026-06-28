@@ -10,7 +10,7 @@ import { useQuotes } from "@/lib/useQuotes";
 import { useAllGeneratedReports } from "@/lib/useResearch";
 import { withLiveQuote } from "@/lib/liveStock";
 import { formatDate, formatINRCompact } from "@/lib/format";
-import { Card, ChangeBadge, ChartMode, ChartModeToggle, LiveBadge, PriceAreaChart, RangeSelector, RatingPill } from "@/components/ui";
+import { Card, ChangeBadge, LiveBadge, PriceAreaChart, RangeSelector, RatingPill } from "@/components/ui";
 import PremiumGate from "@/components/PremiumGate";
 import { Exchange, Stock } from "@/lib/types";
 import { ArrowUpRight, Wallet, FileSearch } from "lucide-react";
@@ -26,7 +26,6 @@ interface SymbolResult {
 export default function OverviewPage() {
   const { user } = useAuth();
   const [range, setRange] = useState<PortfolioRange>("1Y");
-  const [chartMode, setChartMode] = useState<ChartMode>("price");
   const { positions, lots, ready: portfolioReady } = usePortfolio();
   const { symbols: watchlistSymbols, ready: watchlistReady } = useWatchlist();
   const { quotes, sources } = useQuotes(positions.map((p) => p.symbol));
@@ -109,16 +108,18 @@ export default function OverviewPage() {
 
   const wealthHistory = getPortfolioHistory(totalValue, range);
 
-  // No real historical portfolio P/E data exists — approximate it the same
-  // way wealthHistory itself is already a synthetic random walk, anchored to
-  // today's value-weighted average P/E across holdings with a known P/E.
-  const peRows = rows.filter((r) => r.s.peRatio != null);
-  const peWeightTotal = peRows.reduce((sum, r) => sum + r.value, 0);
-  const weightedPe =
-    peWeightTotal > 0
-      ? peRows.reduce((sum, r) => sum + (r.s.peRatio as number) * r.value, 0) / peWeightTotal
-      : null;
-  const peHistory = weightedPe != null ? getPortfolioHistory(weightedPe, range) : null;
+  // wealthHistory's "1Y" points are generic month labels (Jan..Dec) with no
+  // year attached, since the underlying mock data is a shared, dateless
+  // random walk. Re-derive an actual MM/YY label per point, anchored to the
+  // current month, without touching the shared mock-data helper (other
+  // pages rely on its plain month labels).
+  const wealthChartData = wealthHistory.map((h, i) => {
+    if (range !== "1Y") return { date: h.date, value: h.price };
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth() - (wealthHistory.length - 1 - i), 1);
+    const mmYY = `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear() % 100).padStart(2, "0")}`;
+    return { date: mmYY, value: h.price };
+  });
 
   const generatedOrder = Object.keys(generatedReports);
   const recentResearch = Array.from(new Set([...RESEARCH_REPORTS.map((r) => r.symbol), ...generatedOrder]))
@@ -183,34 +184,15 @@ export default function OverviewPage() {
         <Card
           title="Your Wealth Today"
           className="lg:col-span-2"
-          action={
-            <div className="flex items-center gap-2">
-              <ChartModeToggle mode={chartMode} onChange={setChartMode} />
-              <RangeSelector ranges={PORTFOLIO_RANGES} value={range} onChange={setRange} />
-            </div>
-          }
+          action={<RangeSelector ranges={PORTFOLIO_RANGES} value={range} onChange={setRange} />}
         >
-          {chartMode === "pe" ? (
-            peHistory ? (
-              <>
-                <div className="text-xl font-bold text-heading mb-2">{weightedPe!.toFixed(1)}x</div>
-                <PriceAreaChart
-                  data={peHistory.map((h) => ({ date: h.date, value: h.price }))}
-                  valueLabel="P/E"
-                  valueFormat={(v) => `${v.toFixed(1)}x`}
-                />
-              </>
-            ) : (
-              <p className="text-sm text-foreground/50 py-10 text-center">
-                P/E unavailable — no holdings with a known P/E ratio.
-              </p>
-            )
-          ) : (
-            <>
-              <div className="text-xl font-bold text-heading mb-2">{formatINRCompact(totalValue)}</div>
-              <PriceAreaChart data={wealthHistory.map((h) => ({ date: h.date, value: h.price }))} />
-            </>
-          )}
+          <div className="text-xl font-bold text-heading mb-2">{formatINRCompact(totalValue)}</div>
+          <PriceAreaChart
+            data={wealthChartData}
+            yAxisFormatter={(v) => (v / 1_00_000).toFixed(1)}
+            yAxisLabel="Amount (₹ Lakhs)"
+            leftMargin={8}
+          />
         </Card>
         <PremiumGate feature="Research">
           <Card title="Run equity research" className="flex flex-col">
