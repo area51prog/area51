@@ -78,11 +78,21 @@ export async function lookupByInstrumentKey(instrumentKey: string): Promise<Sear
 
 // Used by quote providers to resolve trading symbols to Upstox instrument
 // keys without re-fetching the instrument master they already share here.
+// Callers sometimes already have a fully-qualified instrument key (e.g.
+// index keys like "NSE_INDEX|Nifty Bank", which live outside the *_EQ
+// segments this module indexes) — those are passed through unresolved
+// rather than being looked up, since they're not in the equity list at all.
 export async function getInstrumentKeys(symbols: string[]): Promise<Map<string, string>> {
-  const wanted = new Set(symbols);
-  const [nse, bse] = await Promise.all([loadExchange("NSE"), loadExchange("BSE")]);
-
   const map = new Map<string, string>();
+  const toResolve: string[] = [];
+  for (const s of symbols) {
+    if (s.includes("|")) map.set(s, s);
+    else toResolve.push(s);
+  }
+  if (toResolve.length === 0) return map;
+
+  const wanted = new Set(toResolve);
+  const [nse, bse] = await Promise.all([loadExchange("NSE"), loadExchange("BSE")]);
   for (const inst of [...nse, ...bse]) {
     if (wanted.has(inst.symbol) && !map.has(inst.symbol)) map.set(inst.symbol, inst.instrumentKey);
   }
@@ -90,6 +100,7 @@ export async function getInstrumentKeys(symbols: string[]): Promise<Map<string, 
 }
 
 export async function getInstrumentKey(symbol: string): Promise<string | null> {
+  if (symbol.includes("|")) return symbol;
   const map = await getInstrumentKeys([symbol]);
   return map.get(symbol) ?? null;
 }

@@ -5,6 +5,11 @@ import Link from "next/link";
 import { CalendarClock, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
 import { Card, PriceAreaChart } from "@/components/ui";
 import { LogoLockup } from "@/components/Logo";
+import MarketTicker from "@/components/landing/MarketTicker";
+import SectorOverview from "@/components/landing/SectorOverview";
+import MarketMovers from "@/components/landing/MarketMovers";
+import ResearchTeaser from "@/components/landing/ResearchTeaser";
+import DividendTeaser from "@/components/landing/DividendTeaser";
 
 type MarketSnapshotPoint = { date: string; value: number };
 
@@ -29,6 +34,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <MarketTicker />
       <header className="flex items-center justify-between px-6 sm:px-12 py-6 max-w-6xl w-full mx-auto">
         <div className="flex items-center text-heading">
           <LogoLockup className="h-7" />
@@ -96,6 +102,18 @@ export default function LandingPage() {
             )}
           </Card>
         </section>
+
+        <SectorOverview />
+
+        <section className="max-w-6xl mx-auto px-6 sm:px-12 pb-16">
+          <MarketMovers />
+        </section>
+
+        <section className="max-w-6xl mx-auto px-6 sm:px-12 pb-16">
+          <ResearchTeaser />
+        </section>
+
+        <DividendTeaser />
 
         <section className="max-w-6xl mx-auto px-6 sm:px-12 pb-20">
           <h2 className="text-2xl font-bold text-heading text-center">Choose your plan</h2>

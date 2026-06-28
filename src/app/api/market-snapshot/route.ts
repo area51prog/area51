@@ -47,23 +47,27 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const rangeParam = searchParams.get("range");
   const range: TrendRange = isTrendRange(rangeParam) ? rangeParam : "1M";
+  const symbol = searchParams.get("symbol") || NIFTY_50_SYMBOL;
+  const isDefault = symbol === NIFTY_50_SYMBOL;
 
   try {
     const supabase = await createClient();
-    const candles = await getUpstoxHistoricalCandles(supabase, NIFTY_50_SYMBOL, range);
+    const candles = await getUpstoxHistoricalCandles(supabase, symbol, range);
     if (candles.length > 0) {
       const points = candles.map((c) => ({ date: c.date, value: c.close }));
       return Response.json({ ok: true, mock: false, stale: false, points });
     }
 
-    const stale = await getStaleUpstoxCandles(supabase, NIFTY_50_SYMBOL, range);
+    const stale = await getStaleUpstoxCandles(supabase, symbol, range);
     if (stale && stale.payload.length > 0) {
       const points = stale.payload.map((c) => ({ date: c.date, value: c.close }));
       return Response.json({ ok: true, mock: false, stale: true, staleAt: stale.fetchedAt, points });
     }
 
-    return Response.json({ ok: true, mock: true, stale: false, points: MOCK_CANDLES[range] });
+    // Only the homepage's default Nifty 50 chart has hand-authored mock
+    // candles — other indices show no data rather than a misleading guess.
+    return Response.json({ ok: true, mock: isDefault, stale: false, points: isDefault ? MOCK_CANDLES[range] : [] });
   } catch {
-    return Response.json({ ok: true, mock: true, stale: false, points: MOCK_CANDLES[range] });
+    return Response.json({ ok: true, mock: isDefault, stale: false, points: isDefault ? MOCK_CANDLES[range] : [] });
   }
 }
