@@ -4,7 +4,17 @@ import { createClient } from "@/lib/supabase/server";
 import { UPSTOX_OAUTH_STATE_COOKIE } from "@/app/api/upstox/login/route";
 
 export async function GET(req: NextRequest) {
-  const settingsUrl = new URL("/dashboard/settings", req.url);
+  const clientId = process.env.UPSTOX_CLIENT_ID;
+  const clientSecret = process.env.UPSTOX_CLIENT_SECRET;
+  const redirectUri = process.env.UPSTOX_REDIRECT_URI;
+
+  // Upstox only ever redirects back to our registered redirectUri, so its
+  // origin is the one host we know is publicly reachable. req.url's host can
+  // reflect an internal reverse-proxy address (e.g. 0.0.0.0) depending on the
+  // deploy platform, which would send the browser somewhere unreachable.
+  const origin = redirectUri ? new URL(redirectUri).origin : req.nextUrl.origin;
+  const settingsUrl = new URL("/dashboard/settings", origin);
+
   const code = req.nextUrl.searchParams.get("code");
   const errorParam = req.nextUrl.searchParams.get("error");
   const state = req.nextUrl.searchParams.get("state");
@@ -16,10 +26,6 @@ export async function GET(req: NextRequest) {
     res.cookies.delete(UPSTOX_OAUTH_STATE_COOKIE);
     return res;
   }
-
-  const clientId = process.env.UPSTOX_CLIENT_ID;
-  const clientSecret = process.env.UPSTOX_CLIENT_SECRET;
-  const redirectUri = process.env.UPSTOX_REDIRECT_URI;
 
   if (!clientId || !clientSecret || !redirectUri) {
     settingsUrl.searchParams.set("upstox", "not_configured");
