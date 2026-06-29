@@ -375,6 +375,13 @@ async function fetchFundamentalsEndpoint<T>(
 const FUNDAMENTALS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const fundamentalsCache = new Map<string, { fundamentals: CompanyFundamentals; fetchedAt: number }>();
 
+// `fundamentals` and `pe-history` both call this for the same symbol in
+// parallel on page load — without coalescing, a cold cache means both race
+// past the cache check and each fire the full 5-endpoint Upstox fetch.
+// Tracking in-flight requests lets the second caller await the first's
+// result instead of duplicating it.
+const fundamentalsInFlight = new Map<string, Promise<CompanyFundamentals | null>>();
+
 export async function getUpstoxFundamentals(
   supabase: SupabaseClient<Database>,
   symbol: string
@@ -382,6 +389,20 @@ export async function getUpstoxFundamentals(
   const cached = fundamentalsCache.get(symbol);
   if (cached && Date.now() - cached.fetchedAt < FUNDAMENTALS_CACHE_TTL_MS) return cached.fundamentals;
 
+  const inFlight = fundamentalsInFlight.get(symbol);
+  if (inFlight) return inFlight;
+
+  const promise = fetchUpstoxFundamentals(supabase, symbol).finally(() => {
+    fundamentalsInFlight.delete(symbol);
+  });
+  fundamentalsInFlight.set(symbol, promise);
+  return promise;
+}
+
+async function fetchUpstoxFundamentals(
+  supabase: SupabaseClient<Database>,
+  symbol: string
+): Promise<CompanyFundamentals | null> {
   const accessToken = await getValidUpstoxAccessToken(supabase);
   if (!accessToken) return null;
 

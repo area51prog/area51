@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Star, FileSearch, LayoutDashboard, TrendingUp, Building2 } from "lucide-react";
+import { Star, FileSearch } from "lucide-react";
 import { getStock } from "@/lib/mock-data";
 import { useWatchlist } from "@/lib/useWatchlist";
 import { usePortfolio } from "@/lib/usePortfolio";
@@ -16,6 +16,12 @@ import {
   FullQuote,
   CandlePoint,
   CompanyFundamentals,
+  CompanyProfile,
+  KeyRatio,
+  ShareholdingSlice,
+  CorporateActionRow,
+  ActionType,
+  Competitor,
 } from "@/lib/types";
 
 interface InstrumentInfo {
@@ -27,13 +33,6 @@ interface InstrumentInfo {
 type TrendRange = "1D" | "1W" | "1M" | "1Y" | "5Y";
 const TREND_RANGES: TrendRange[] = ["1D", "1W", "1M", "1Y", "5Y"];
 
-type Tab = "overview" | "trends" | "fundamentals";
-const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "trends", label: "Trends", icon: TrendingUp },
-  { id: "fundamentals", label: "Fundamentals", icon: Building2 },
-];
-
 const QUOTE_REFRESH_MS = 60_000;
 
 export default function StockDetailPage() {
@@ -44,7 +43,6 @@ export default function StockDetailPage() {
   const { symbols, toggle } = useWatchlist();
   const { positions } = usePortfolio();
 
-  const [tab, setTab] = useState<Tab>("overview");
   const [trendRange, setTrendRange] = useState<TrendRange>("1Y");
   const [chartMode, setChartMode] = useState<ChartMode>("price");
   const [livePeHistory, setLivePeHistory] = useState<{ date: string; value: number }[] | null>(null);
@@ -57,6 +55,7 @@ export default function StockDetailPage() {
   const [trendCandles, setTrendCandles] = useState<CandlePoint[] | undefined>(undefined);
   const [fundamentals, setFundamentals] = useState<CompanyFundamentals | null | undefined>(undefined);
   const [fundamentalsStale, setFundamentalsStale] = useState<string | null>(null);
+  const [corporateActions, setCorporateActions] = useState<CorporateActionRow[] | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,6 +175,21 @@ export default function StockDetailPage() {
     };
   }, [symbol]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/corporate-actions?symbols=${encodeURIComponent(symbol)}`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (!cancelled) setCorporateActions(body.ok ? body.events : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCorporateActions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
+
   if (instrument === undefined) return null;
   if (instrument === null) return notFound();
 
@@ -248,26 +262,20 @@ export default function StockDetailPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 rounded-lg bg-surface border border-line p-1 w-fit">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3.5 py-1.5 rounded-md transition-colors ${
-              tab === id ? "bg-brand text-white" : "text-foreground/50 hover:text-foreground"
-            }`}
-          >
-            <Icon size={15} /> {label}
-          </button>
-        ))}
-      </div>
+      <SectionNav
+        items={[
+          { id: "trend", label: "Trend", show: true },
+          { id: "profile", label: "Profile", show: Boolean(fundamentals?.profile) },
+          { id: "overview", label: "Overview", show: Boolean(quote) },
+          { id: "key-ratios", label: "Key ratios", show: Boolean(fundamentals?.keyRatios.length) },
+          { id: "shareholding", label: "Shareholding", show: Boolean(fundamentals?.shareholding.length) },
+          { id: "corporate-actions", label: "Corporate actions", show: Boolean(corporateActions?.length) },
+          { id: "competitors", label: "Competitors", show: Boolean(fundamentals?.competitors.length) },
+        ]}
+      />
 
-      {tab === "overview" && (
-        <OverviewTab quote={quote} week52High={week52High} week52Low={week52Low} holding={holding} price={quote?.price} />
-      )}
-
-      {tab === "trends" && (
-        <TrendsTab
+      <div id="trend" className="scroll-mt-14">
+        <TrendsSection
           symbol={instrument.symbol}
           range={trendRange}
           onRangeChange={setTrendRange}
@@ -277,14 +285,88 @@ export default function StockDetailPage() {
           onChartModeChange={setChartMode}
           peData={mockStock ? derivePeHistory(mockStock) : livePeHistory}
         />
+      </div>
+
+      {fundamentals === undefined ? (
+        <Card>
+          <p className="text-sm text-foreground/50 py-10 text-center">Loading fundamentals…</p>
+        </Card>
+      ) : !fundamentals ? (
+        <Card>
+          <p className="text-sm text-foreground/50 py-10 text-center">
+            Fundamentals data isn&apos;t available for this symbol right now.
+          </p>
+        </Card>
+      ) : (
+        <>
+          {fundamentalsStale && (
+            <p className="text-xs font-medium text-amber-500">
+              Live token expired — showing fundamentals last fetched{" "}
+              {new Date(fundamentalsStale).toLocaleString("en-IN")}.
+            </p>
+          )}
+          {fundamentals.profile && (
+            <div id="profile" className="scroll-mt-14">
+              <CompanyProfileCard profile={fundamentals.profile} />
+            </div>
+          )}
+        </>
       )}
 
-      {tab === "fundamentals" && <FundamentalsTab fundamentals={fundamentals} staleAt={fundamentalsStale} />}
+      <div id="overview" className="scroll-mt-14">
+        <OverviewSection
+          quote={quote}
+          week52High={week52High}
+          week52Low={week52Low}
+          holding={holding}
+          price={quote?.price}
+        />
+      </div>
+
+      {fundamentals && fundamentals.keyRatios.length > 0 && (
+        <div id="key-ratios" className="scroll-mt-14">
+          <KeyRatiosCard keyRatios={fundamentals.keyRatios} />
+        </div>
+      )}
+      {fundamentals && fundamentals.shareholding.length > 0 && (
+        <div id="shareholding" className="scroll-mt-14">
+          <ShareholdingCard shareholding={fundamentals.shareholding} />
+        </div>
+      )}
+      {corporateActions && corporateActions.length > 0 && (
+        <div id="corporate-actions" className="scroll-mt-14">
+          <CorporateActionsCard corporateActions={corporateActions} />
+        </div>
+      )}
+      {fundamentals && fundamentals.competitors.length > 0 && (
+        <div id="competitors" className="scroll-mt-14">
+          <CompetitorsCard competitors={fundamentals.competitors} />
+        </div>
+      )}
     </div>
   );
 }
 
-function OverviewTab({
+function SectionNav({ items }: { items: { id: string; label: string; show: boolean }[] }) {
+  const visible = items.filter((item) => item.show);
+  if (visible.length < 2) return null;
+
+  return (
+    <nav className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 bg-background/95 backdrop-blur border-b border-line flex items-center gap-1 overflow-x-auto">
+      {visible.map((item) => (
+        <a
+          key={item.id}
+          href={`#${item.id}`}
+          className="text-sm font-medium text-foreground/60 hover:text-heading hover:bg-surface whitespace-nowrap px-3 py-1.5 rounded-md transition-colors"
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+function OverviewSection({
   quote,
   week52High,
   week52Low,
@@ -374,7 +456,7 @@ function OverviewTab({
   );
 }
 
-function TrendsTab({
+function TrendsSection({
   symbol,
   range,
   onRangeChange,
@@ -442,129 +524,131 @@ function TrendsTab({
   );
 }
 
-function FundamentalsTab({
-  fundamentals,
-  staleAt,
-}: {
-  fundamentals: CompanyFundamentals | null | undefined;
-  staleAt: string | null;
-}) {
-  if (fundamentals === undefined) {
-    return (
-      <Card>
-        <p className="text-sm text-foreground/50 py-10 text-center">Loading fundamentals…</p>
-      </Card>
-    );
-  }
+function CompanyProfileCard({ profile }: { profile: CompanyProfile }) {
+  return (
+    <Card title="Company profile">
+      <p className="text-sm text-foreground/60 leading-relaxed mb-3">{profile.description}</p>
+      <div className="flex gap-6">
+        <div>
+          <div className="text-xs text-foreground/50">Sector</div>
+          <div className="text-sm font-semibold text-heading">{profile.sector}</div>
+        </div>
+        <div>
+          <div className="text-xs text-foreground/50">Sector market cap</div>
+          <div className="text-sm font-semibold text-heading">₹{formatINR(profile.sectorMarketCapInrCr, 0)} cr</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
-  if (!fundamentals) {
-    return (
-      <Card>
-        <p className="text-sm text-foreground/50 py-10 text-center">
-          Fundamentals data isn&apos;t available for this symbol right now.
-        </p>
-      </Card>
-    );
-  }
+function KeyRatiosCard({ keyRatios }: { keyRatios: KeyRatio[] }) {
+  return (
+    <Card title="Key ratios">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {keyRatios.map((r) => (
+          <div key={r.name} className="bg-background rounded-lg px-3.5 py-2.5">
+            <div className="text-xs text-foreground/50">{r.name}</div>
+            <div className="text-base font-semibold text-heading">{r.companyValue}</div>
+            <div className="text-xs text-foreground/40">sector {r.sectorValue}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
-  const { profile, keyRatios, shareholding, corporateActions, competitors } = fundamentals;
-  const shareholdingColors = ["bg-brand", "bg-up", "bg-blue-500", "bg-amber-400", "bg-foreground/20"];
+const SHAREHOLDING_COLORS = ["bg-brand", "bg-up", "bg-blue-500", "bg-amber-400", "bg-foreground/20"];
+
+function ShareholdingCard({ shareholding }: { shareholding: ShareholdingSlice[] }) {
+  return (
+    <Card title="Shareholding pattern">
+      <div className="flex h-3.5 rounded-full overflow-hidden">
+        {shareholding.map((s, i) => (
+          <div
+            key={s.category}
+            className={SHAREHOLDING_COLORS[i % SHAREHOLDING_COLORS.length]}
+            style={{ width: `${s.percent}%` }}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-3 mt-2 text-xs text-foreground/50">
+        {shareholding.map((s, i) => (
+          <span key={s.category} className="flex items-center gap-1.5">
+            <span className={`h-1.5 w-1.5 rounded-full ${SHAREHOLDING_COLORS[i % SHAREHOLDING_COLORS.length]}`} />
+            {s.category} {s.percent.toFixed(1)}%
+          </span>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+const ACTION_BADGE_STYLES: Record<ActionType, string> = {
+  Dividend: "bg-up/10 text-up",
+  Bonus: "bg-blue-500/10 text-blue-600",
+  Split: "bg-blue-500/10 text-blue-600",
+  Rights: "bg-purple-500/10 text-purple-600",
+  Buyback: "bg-amber-400/10 text-amber-600",
+  Merger: "bg-foreground/10 text-foreground/60",
+  Delisting: "bg-down/10 text-down",
+};
+
+function formatExDate(exDate: string): string {
+  const parsed = new Date(exDate);
+  if (Number.isNaN(parsed.getTime())) return exDate;
+  return parsed.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function CorporateActionsCard({ corporateActions }: { corporateActions: CorporateActionRow[] }) {
+  const sorted = [...corporateActions].sort((a, b) => {
+    const aTime = a.exDate ? new Date(a.exDate).getTime() : 0;
+    const bTime = b.exDate ? new Date(b.exDate).getTime() : 0;
+    return bTime - aTime;
+  });
 
   return (
-    <div className="space-y-4">
-      {staleAt && (
-        <p className="text-xs font-medium text-amber-500">
-          Live token expired — showing fundamentals last fetched {new Date(staleAt).toLocaleString("en-IN")}.
-        </p>
-      )}
-      {profile && (
-        <Card title="Company profile">
-          <p className="text-sm text-foreground/60 leading-relaxed mb-3">{profile.description}</p>
-          <div className="flex gap-6">
-            <div>
-              <div className="text-xs text-foreground/50">Sector</div>
-              <div className="text-sm font-semibold text-heading">{profile.sector}</div>
-            </div>
-            <div>
-              <div className="text-xs text-foreground/50">Sector market cap</div>
-              <div className="text-sm font-semibold text-heading">
-                ₹{formatINR(profile.sectorMarketCapInrCr, 0)} cr
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {keyRatios.length > 0 && (
-        <Card title="Key ratios">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {keyRatios.map((r) => (
-              <div key={r.name} className="bg-background rounded-lg px-3.5 py-2.5">
-                <div className="text-xs text-foreground/50">{r.name}</div>
-                <div className="text-base font-semibold text-heading">{r.companyValue}</div>
-                <div className="text-xs text-foreground/40">sector {r.sectorValue}</div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {shareholding.length > 0 && (
-        <Card title="Shareholding pattern">
-          <div className="flex h-3.5 rounded-full overflow-hidden">
-            {shareholding.map((s, i) => (
-              <div
-                key={s.category}
-                className={shareholdingColors[i % shareholdingColors.length]}
-                style={{ width: `${s.percent}%` }}
-              />
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-3 mt-2 text-xs text-foreground/50">
-            {shareholding.map((s, i) => (
-              <span key={s.category} className="flex items-center gap-1.5">
-                <span className={`h-1.5 w-1.5 rounded-full ${shareholdingColors[i % shareholdingColors.length]}`} />
-                {s.category} {s.percent.toFixed(1)}%
+    <Card title="Corporate actions">
+      <div className="divide-y divide-line">
+        {sorted.map((a, i) => (
+          <div key={i} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span
+                className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-none ${ACTION_BADGE_STYLES[a.actionType]}`}
+              >
+                {a.actionType}
               </span>
-            ))}
+              <span className="text-foreground/70 truncate">{a.subType ?? a.rawName}</span>
+            </div>
+            <div className="text-right flex-none">
+              {a.amount !== null && <div className="font-semibold text-heading">₹{a.amount.toFixed(2)}</div>}
+              {a.exDate && <div className="text-xs text-foreground/40">Ex-date {formatExDate(a.exDate)}</div>}
+            </div>
           </div>
-        </Card>
-      )}
+        ))}
+      </div>
+    </Card>
+  );
+}
 
-      {corporateActions.length > 0 && (
-        <Card title="Corporate actions">
-          <div className="divide-y divide-line">
-            {corporateActions.map((a, i) => (
-              <div key={i} className="flex items-center justify-between py-2 text-sm">
-                <span>{a.details}</span>
-                {a.exDate && <span className="text-foreground/50 text-xs">Ex-date {a.exDate}</span>}
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {competitors.length > 0 && (
-        <Card title="Competitors">
-          <div className="flex flex-wrap gap-2">
-            {competitors.map((c, i) => {
-              const content = (
-                <span className="bg-background rounded-full px-3 py-1.5 text-sm font-medium text-heading">
-                  {c.name}
-                </span>
-              );
-              return c.symbol ? (
-                <Link key={i} href={`/dashboard/stocks/${c.symbol}`}>
-                  {content}
-                </Link>
-              ) : (
-                <span key={i}>{content}</span>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-    </div>
+function CompetitorsCard({ competitors }: { competitors: Competitor[] }) {
+  return (
+    <Card title="Competitors">
+      <div className="flex flex-wrap gap-2">
+        {competitors.map((c, i) => {
+          const content = (
+            <span className="bg-background rounded-full px-3 py-1.5 text-sm font-medium text-heading">{c.name}</span>
+          );
+          return c.symbol ? (
+            <Link key={i} href={`/dashboard/stocks/${c.symbol}`}>
+              {content}
+            </Link>
+          ) : (
+            <span key={i}>{content}</span>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 

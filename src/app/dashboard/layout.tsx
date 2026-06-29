@@ -41,7 +41,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar title={titleFor(pathname)} />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-24 md:pb-6 max-w-[1400px] w-full mx-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto scroll-smooth p-4 sm:p-6 pb-24 md:pb-6 max-w-[1400px] w-full mx-auto">
+          {children}
+        </main>
       </div>
       <MobileNav />
     </div>
