@@ -78,7 +78,10 @@ export default function PrivacyPage() {
       </main>
 
       <footer className="text-center text-xs text-foreground/40 py-8">
-        © 2026 Alloqo. For educational purposes only — not investment advice.
+        © 2026 Alloqo. For educational purposes only — not investment advice.{" "}
+        <Link href="/terms" className="hover:underline">
+          Terms of Service
+        </Link>
       </footer>
     </div>
   );

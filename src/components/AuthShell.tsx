@@ -30,7 +30,16 @@ export default function AuthShell({
             <Feature icon={<ShieldCheck size={18} />} text="Your data stays yours — manual portfolio entry, no brokerage linking required" />
           </div>
         </div>
-        <div className="relative z-10 text-xs text-white/40">© 2026 Alloqo. For educational purposes only — not investment advice.</div>
+        <div className="relative z-10 text-xs text-white/50">
+          © 2026 Alloqo. Not an Investment Advice.{" "}
+          <Link href="/privacy" className="text-white/50 hover:text-white hover:underline">
+            Privacy Policy
+          </Link>{" "}
+          ·{" "}
+          <Link href="/terms" className="text-white/50 hover:text-white hover:underline">
+            Terms of Service
+          </Link>
+        </div>
       </div>
 
       <div className="flex-1 flex items-center justify-center p-6 sm:p-12">

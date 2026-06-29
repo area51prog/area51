@@ -183,6 +183,10 @@ export default function LandingPage() {
           © 2026 Alloqo. Not an Investment Advice.{" "}
           <Link href="/privacy" className="text-white/50 hover:text-white hover:underline">
             Privacy Policy
+          </Link>{" "}
+          ·{" "}
+          <Link href="/terms" className="text-white/50 hover:text-white hover:underline">
+            Terms of Service
           </Link>
         </p>
       </footer>
