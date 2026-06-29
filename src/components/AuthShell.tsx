@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import Link from "next/link";
 import { TrendingUp, ShieldCheck, CalendarClock, Sparkles } from "lucide-react";
 import { LogoLockup } from "@/components/Logo";
 
@@ -15,9 +16,9 @@ export default function AuthShell({
     <div className="min-h-screen flex bg-background">
       <div className="hidden lg:flex lg:w-1/2 bg-navy text-white flex-col justify-between p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(79,70,229,0.35),transparent_50%)]" />
-        <div className="relative z-10">
+        <Link href="/" className="relative z-10 inline-flex">
           <LogoLockup className="h-7" />
-        </div>
+        </Link>
         <div className="relative z-10 space-y-8 max-w-md">
           <h2 className="text-3xl font-bold leading-tight">
             Indian markets, tracked smarter.
@@ -34,9 +35,9 @@ export default function AuthShell({
 
       <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-sm">
-          <div className="lg:hidden flex items-center text-heading mb-8">
+          <Link href="/" className="lg:hidden flex items-center text-heading mb-8">
             <LogoLockup className="h-7" />
-          </div>
+          </Link>
           <h1 className="text-2xl font-bold text-heading">{title}</h1>
           <p className="text-sm text-foreground/60 mt-1 mb-8">{subtitle}</p>
           {children}

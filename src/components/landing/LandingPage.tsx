@@ -34,9 +34,9 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background flex flex-col">
       <MarketTicker />
       <header className="flex items-center justify-between gap-4 px-6 sm:px-12 py-6 max-w-6xl w-full mx-auto">
-        <div className="flex items-center text-heading flex-none">
+        <Link href="/" className="flex items-center text-heading flex-none">
           <LogoLockup className="h-7" />
-        </div>
+        </Link>
         <div className="hidden sm:block flex-1 max-w-xs">
           <NavSearch />
         </div>

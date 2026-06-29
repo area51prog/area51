@@ -35,9 +35,9 @@ export default function Sidebar() {
 
   return (
     <aside className="hidden md:flex w-60 flex-none flex-col border-r border-line bg-surface">
-      <div className="h-16 flex items-center px-6 text-heading">
+      <Link href="/" className="h-16 flex items-center px-6 text-heading">
         <LogoLockup className="h-6" />
-      </div>
+      </Link>
       <nav className="flex-1 px-3 py-2 space-y-0.5">
         {NAV.map(({ href, label, icon: Icon, premium }) => {
           const active = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
