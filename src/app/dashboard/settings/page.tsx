@@ -321,16 +321,21 @@ function Toggle({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between cursor-pointer">
+    <label className="flex items-center justify-between gap-4 cursor-pointer">
       <span className="text-foreground/70">{label}</span>
       <button
         type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`w-10 h-6 rounded-full transition-colors relative ${checked ? "bg-brand" : "bg-line"}`}
+        className={`flex-none w-11 h-6 rounded-full border transition-colors relative outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${
+          checked ? "bg-brand border-brand" : "bg-foreground/15 border-line"
+        }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-            checked ? "translate-x-5" : "translate-x-0.5"
+          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            checked ? "translate-x-5" : "translate-x-0"
           }`}
         />
       </button>
