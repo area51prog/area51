@@ -25,27 +25,49 @@ interface OhlcEntry {
 
 export type TrendRange = "1D" | "1W" | "1M" | "1Y" | "5Y";
 
+// Quotes move every few seconds during market hours, but a short shared
+// cache means concurrent users/tabs watching the same symbol within the
+// window get served from memory instead of each triggering their own
+// Upstox call (the 60s frontend poll otherwise multiplies per viewer).
+const QUOTE_CACHE_TTL_MS = 20 * 1000;
+const quoteCache = new Map<string, { quote: LiveQuote; fetchedAt: number }>();
+
 export async function getUpstoxQuotes(
   supabase: SupabaseClient<Database>,
   symbols: string[]
 ): Promise<Record<string, LiveQuote>> {
+  const result: Record<string, LiveQuote> = {};
+  const now = Date.now();
+
+  const toFetch: string[] = [];
+  for (const symbol of symbols) {
+    const cached = quoteCache.get(symbol);
+    if (cached && now - cached.fetchedAt < QUOTE_CACHE_TTL_MS) {
+      result[symbol] = cached.quote;
+    } else {
+      toFetch.push(symbol);
+    }
+  }
+
+  if (toFetch.length === 0) return result;
+
   const accessToken = await getValidUpstoxAccessToken(supabase);
-  if (!accessToken || symbols.length === 0) return {};
+  if (!accessToken) return result;
 
   let instrumentMap: Map<string, string>;
   try {
-    instrumentMap = await getInstrumentKeys(symbols);
+    instrumentMap = await getInstrumentKeys(toFetch);
   } catch {
-    return {};
+    return result;
   }
 
   const symbolByInstrumentKey = new Map<string, string>();
-  for (const symbol of symbols) {
+  for (const symbol of toFetch) {
     const key = instrumentMap.get(symbol);
     if (key) symbolByInstrumentKey.set(key, symbol);
   }
 
-  if (symbolByInstrumentKey.size === 0) return {};
+  if (symbolByInstrumentKey.size === 0) return result;
 
   const instrumentKeys = [...symbolByInstrumentKey.keys()].join(",");
 
@@ -57,18 +79,18 @@ export async function getUpstoxQuotes(
         cache: "no-store",
       }
     );
-    if (!res.ok) return {};
+    if (!res.ok) return result;
 
     const body: { status: string; data?: Record<string, OhlcEntry> } = await res.json();
-    if (body.status !== "success" || !body.data) return {};
+    if (body.status !== "success" || !body.data) return result;
 
-    const result: Record<string, LiveQuote> = {};
+    const fresh: Record<string, LiveQuote> = {};
     for (const entry of Object.values(body.data)) {
       const symbol = symbolByInstrumentKey.get(entry.instrument_token);
       if (!symbol) continue;
       const prevClose = entry.prev_ohlc?.close ?? entry.live_ohlc.close;
       const price = entry.last_price;
-      result[symbol] = {
+      fresh[symbol] = {
         price,
         change: price - prevClose,
         changePercent: prevClose ? ((price - prevClose) / prevClose) * 100 : null,
@@ -78,14 +100,19 @@ export async function getUpstoxQuotes(
       };
     }
 
+    for (const [symbol, quote] of Object.entries(fresh)) {
+      quoteCache.set(symbol, { quote, fetchedAt: now });
+      result[symbol] = quote;
+    }
+
     await writeStaleCacheMany(
       supabase,
-      Object.entries(result).map(([symbol, quote]) => ({ cacheKey: `quote:${symbol}`, payload: quote }))
+      Object.entries(fresh).map(([symbol, quote]) => ({ cacheKey: `quote:${symbol}`, payload: quote }))
     );
 
     return result;
   } catch {
-    return {};
+    return result;
   }
 }
 
@@ -126,10 +153,15 @@ function toDepthLevels(levels: { price: number; quantity: number }[]): DepthLeve
     .map((l) => ({ price: l.price, quantity: l.quantity }));
 }
 
+const fullQuoteCache = new Map<string, { quote: FullQuote; fetchedAt: number }>();
+
 export async function getUpstoxFullQuote(
   supabase: SupabaseClient<Database>,
   symbol: string
 ): Promise<FullQuote | null> {
+  const cached = fullQuoteCache.get(symbol);
+  if (cached && Date.now() - cached.fetchedAt < QUOTE_CACHE_TTL_MS) return cached.quote;
+
   const accessToken = await getValidUpstoxAccessToken(supabase);
   if (!accessToken) return null;
 
@@ -169,6 +201,7 @@ export async function getUpstoxFullQuote(
       timestamp: entry.timestamp,
     };
 
+    fullQuoteCache.set(symbol, { quote, fetchedAt: Date.now() });
     await writeStaleCache(supabase, `full_quote:${symbol}`, quote);
     return quote;
   } catch {
@@ -201,11 +234,17 @@ const RANGE_CANDLE_CONFIG: Record<
 type RawCandle = [string, number, number, number, number, number, number];
 
 // 1Y/5Y candles are daily/weekly and only ever gain a new bar once a day at
-// most — caching them avoids re-fetching the same multi-year history on
-// every tab switch. 1D/1W/1M stay live (no cache) since intraday/recent
-// candles are still moving during market hours.
-const CACHEABLE_RANGES = new Set<TrendRange>(["1Y", "5Y"]);
-const CANDLE_CACHE_TTL_MS = 60 * 60 * 1000;
+// most — caching them for an hour avoids re-fetching the same multi-year
+// history on every tab switch. 1D/1W/1M are still moving during market
+// hours, so they get a much shorter TTL that just dedupes rapid range
+// switches/re-renders instead of going fully live on every request.
+const CANDLE_CACHE_TTL_MS: Record<TrendRange, number> = {
+  "1D": 60 * 1000,
+  "1W": 60 * 1000,
+  "1M": 60 * 1000,
+  "1Y": 60 * 60 * 1000,
+  "5Y": 60 * 60 * 1000,
+};
 const candleCache = new Map<string, { candles: CandlePoint[]; fetchedAt: number }>();
 
 export async function getUpstoxHistoricalCandles(
@@ -214,10 +253,8 @@ export async function getUpstoxHistoricalCandles(
   range: TrendRange
 ): Promise<CandlePoint[]> {
   const cacheKey = `${symbol}:${range}`;
-  if (CACHEABLE_RANGES.has(range)) {
-    const cached = candleCache.get(cacheKey);
-    if (cached && Date.now() - cached.fetchedAt < CANDLE_CACHE_TTL_MS) return cached.candles;
-  }
+  const cached = candleCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < CANDLE_CACHE_TTL_MS[range]) return cached.candles;
 
   const accessToken = await getValidUpstoxAccessToken(supabase);
   if (!accessToken) return [];
@@ -260,7 +297,7 @@ export async function getUpstoxHistoricalCandles(
       }))
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
-    if (CACHEABLE_RANGES.has(range) && candles.length > 0) {
+    if (candles.length > 0) {
       candleCache.set(cacheKey, { candles, fetchedAt: Date.now() });
     }
 
@@ -332,10 +369,19 @@ async function fetchFundamentalsEndpoint<T>(
   }
 }
 
+// Fundamentals (profile, ratios, shareholding, corporate actions,
+// competitors) barely move intraday — a day-long cache avoids re-running 5
+// Upstox endpoints every 60s alongside the quote poll.
+const FUNDAMENTALS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const fundamentalsCache = new Map<string, { fundamentals: CompanyFundamentals; fetchedAt: number }>();
+
 export async function getUpstoxFundamentals(
   supabase: SupabaseClient<Database>,
   symbol: string
 ): Promise<CompanyFundamentals | null> {
+  const cached = fundamentalsCache.get(symbol);
+  if (cached && Date.now() - cached.fetchedAt < FUNDAMENTALS_CACHE_TTL_MS) return cached.fundamentals;
+
   const accessToken = await getValidUpstoxAccessToken(supabase);
   if (!accessToken) return null;
 
@@ -402,6 +448,7 @@ export async function getUpstoxFundamentals(
   if (!profile && keyRatios.length === 0 && shareholding.length === 0) return null;
 
   const fundamentals: CompanyFundamentals = { profile, keyRatios, shareholding, corporateActions, competitors };
+  fundamentalsCache.set(symbol, { fundamentals, fetchedAt: Date.now() });
   await writeStaleCache(supabase, `fundamentals:${symbol}`, fundamentals);
   return fundamentals;
 }
