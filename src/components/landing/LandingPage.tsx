@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarClock, ChevronDown, LogOut, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
@@ -17,6 +17,18 @@ export default function LandingPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -30,7 +42,7 @@ export default function LandingPage() {
         </div>
         <nav className="flex items-center gap-4 flex-none">
           {!loading && user ? (
-            <div className="relative">
+            <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setMenuOpen((o) => !o)}
                 className="flex items-center gap-1.5 text-sm font-medium text-foreground/70 hover:text-foreground"

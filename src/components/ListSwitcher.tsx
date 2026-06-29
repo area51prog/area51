@@ -41,6 +41,7 @@ export function ListSwitcher({
   const atLimit = lists.length >= maxLists;
   const active = lists.find((l) => l.id === activeId);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -52,6 +53,17 @@ export function ListSwitcher({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
+
+  useEffect(() => {
+    if (!menuForId) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuForId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuForId]);
 
   function startEdit(list: ListOption) {
     setMenuForId(null);
@@ -132,7 +144,7 @@ export function ListSwitcher({
           </button>
         )}
         {menuForId === active?.id && active && (
-          <div className="absolute z-10 top-full mt-1 left-0 w-32 rounded-lg border border-line bg-surface shadow-lg p-1">
+          <div ref={menuRef} className="absolute z-10 top-full mt-1 left-0 w-32 rounded-lg border border-line bg-surface shadow-lg p-1">
             <button
               onClick={() => startEdit(active)}
               className="w-full text-left text-sm rounded-md px-2.5 py-1.5 hover:bg-background"
@@ -229,7 +241,7 @@ export function ListSwitcher({
                   </div>
                 )}
                 {menuForId === l.id && !isEditing && !isConfirming && (
-                  <div className="absolute z-20 right-0 top-full mt-0.5 w-32 rounded-lg border border-line bg-surface shadow-lg p-1">
+                  <div ref={menuRef} className="absolute z-20 right-0 top-full mt-0.5 w-32 rounded-lg border border-line bg-surface shadow-lg p-1">
                     {onRename && (
                       <button
                         onClick={() => startEdit(l)}

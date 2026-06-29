@@ -57,6 +57,30 @@ export default function Topbar({ title }: { title: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!notifOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [notifOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
 
   useEffect(() => {
     const q = query.trim();
@@ -124,7 +148,7 @@ export default function Topbar({ title }: { title: string }) {
         {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
       </button>
 
-      <div className="relative flex-none">
+      <div className="relative flex-none" ref={notifRef}>
         <button
           onClick={() => setNotifOpen((o) => !o)}
           className="relative flex-none h-9 w-9 rounded-full bg-background flex items-center justify-center text-foreground/60 hover:text-foreground"
@@ -181,7 +205,7 @@ export default function Topbar({ title }: { title: string }) {
         )}
       </div>
 
-      <div className="relative flex-none">
+      <div className="relative flex-none" ref={menuRef}>
         <button
           onClick={() => setMenuOpen((o) => !o)}
           className="flex items-center gap-2 rounded-full pl-1 pr-2.5 py-1 hover:bg-background"
