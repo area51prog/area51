@@ -12,6 +12,7 @@ export async function GET() {
     upstoxConfigured,
     upstoxConnected,
     upstoxExpiresAt: token?.expiresAt ?? null,
+    analyticsTokenLoaded: Boolean(process.env.UPSTOX_ANALYTICS_TOKEN),
     finnhubConfigured,
   });
 }
