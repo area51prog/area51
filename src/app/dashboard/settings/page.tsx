@@ -26,6 +26,7 @@ interface ProvidersStatus {
   upstoxConfigured: boolean;
   upstoxConnected: boolean;
   upstoxExpiresAt: number | null;
+  analyticsTokenLoaded: boolean;
   finnhubConfigured: boolean;
 }
 
@@ -195,8 +196,24 @@ function SettingsPageInner() {
 
           <div className="flex items-center justify-between border-t border-line pt-4">
             <div>
-              <div className="text-sm font-semibold text-heading">Finnhub</div>
-              <div className="text-xs text-foreground/50">Fallback provider — used when Live has no data for a symbol.</div>
+              <div className="text-sm font-semibold text-heading">Analytics</div>
+              <div className="text-xs text-foreground/50">App-level token for market data — serves all users without daily OAuth.</div>
+            </div>
+            {providers?.analyticsTokenLoaded ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-up">
+                <CheckCircle2 size={14} /> Loaded
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground/40">
+                <Circle size={14} /> Not configured
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between border-t border-line pt-4">
+            <div>
+              <div className="text-sm font-semibold text-heading">Fallback</div>
+              <div className="text-xs text-foreground/50">Secondary provider — used when Live has no data for a symbol.</div>
             </div>
             {providers?.finnhubConfigured ? (
               <span className="flex items-center gap-1.5 text-xs font-semibold text-up">
@@ -210,7 +227,7 @@ function SettingsPageInner() {
           </div>
 
           <p className="text-xs text-foreground/40 pt-1">
-            Provider order: Live → Finnhub → mock data. The Live/Mock badge next to prices throughout the app shows which one served each quote.
+            Provider order: Live → Analytics → Fallback → mock data. The Live/Mock badge next to prices throughout the app shows which one served each quote.
           </p>
         </div>
       </Card>
