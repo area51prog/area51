@@ -148,6 +148,7 @@ export default function DividendsTab({ positions, events }: { positions: Positio
           </div>
           <div className="text-2xl font-bold text-up mt-2">₹{formatINR(annualDividendIncome, 0)}</div>
           <div className="text-xs text-foreground/50 mt-1">Trailing 12 months, across {trailing12mo.length} payouts</div>
+          <div className="text-xs text-foreground/50 mt-0.5">Monthly ₹{formatINR(annualDividendIncome / 12, 0)}</div>
         </Card>
         <Card>
           <div className="flex items-center gap-2 text-xs font-semibold text-foreground/50 uppercase tracking-wide">
