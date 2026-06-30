@@ -13,6 +13,8 @@ export default function SignupPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [countryCode, setCountryCode] = useState("+91");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
   const [error, setError] = useState("");
@@ -21,7 +23,7 @@ export default function SignupPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name || !email || !password) {
+    if (!name || !email || !phoneNumber || !password) {
       setError("Please fill in all fields.");
       return;
     }
@@ -36,7 +38,7 @@ export default function SignupPage() {
     setError("");
     setSubmitting(true);
     try {
-      await signup(name, email, password, captchaToken);
+      await signup(name, email, `${countryCode}${phoneNumber}`, password, captchaToken);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create account.");
@@ -69,6 +71,28 @@ export default function SignupPage() {
             className="w-full rounded-lg border border-line bg-surface text-foreground px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
           />
         </Field>
+        <Field label="Phone number">
+          <div className="flex rounded-lg border border-line bg-surface focus-within:ring-2 focus-within:ring-brand/30 focus-within:border-brand">
+            <select
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value)}
+              className="shrink-0 rounded-l-lg bg-transparent text-foreground text-sm px-2.5 py-2.5 outline-none border-r border-line cursor-pointer"
+            >
+              {COUNTRY_CODES.map(({ code, label }) => (
+                <option key={label} value={code}>{label}</option>
+              ))}
+            </select>
+            <input
+              type="tel"
+              required
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="98765 43210"
+              className="flex-1 min-w-0 rounded-r-lg bg-transparent text-foreground px-3 py-2.5 text-sm outline-none"
+            />
+          </div>
+        </Field>
+        <p className="text-xs text-foreground/40 -mt-2">Used only for account security. Never shared or used for marketing.</p>
         <Field label="Password">
           <input
             type="password"
@@ -98,6 +122,29 @@ export default function SignupPage() {
     </AuthShell>
   );
 }
+
+const COUNTRY_CODES = [
+  { code: "+91", label: "🇮🇳 +91" },
+  { code: "+1", label: "🇺🇸 +1" },
+  { code: "+44", label: "🇬🇧 +44" },
+  { code: "+61", label: "🇦🇺 +61" },
+  { code: "+1", label: "🇨🇦 +1" },
+  { code: "+65", label: "🇸🇬 +65" },
+  { code: "+971", label: "🇦🇪 +971" },
+  { code: "+974", label: "🇶🇦 +974" },
+  { code: "+966", label: "🇸🇦 +966" },
+  { code: "+60", label: "🇲🇾 +60" },
+  { code: "+64", label: "🇳🇿 +64" },
+  { code: "+49", label: "🇩🇪 +49" },
+  { code: "+33", label: "🇫🇷 +33" },
+  { code: "+81", label: "🇯🇵 +81" },
+  { code: "+82", label: "🇰🇷 +82" },
+  { code: "+86", label: "🇨🇳 +86" },
+  { code: "+55", label: "🇧🇷 +55" },
+  { code: "+27", label: "🇿🇦 +27" },
+  { code: "+234", label: "🇳🇬 +234" },
+  { code: "+254", label: "🇰🇪 +254" },
+];
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
