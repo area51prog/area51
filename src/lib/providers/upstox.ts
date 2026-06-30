@@ -350,6 +350,24 @@ function humanizeShareholdingCategory(category: string): string {
   );
 }
 
+export async function getUpstoxCorporateActionsOnly(
+  supabase: SupabaseClient<Database>,
+  symbol: string
+): Promise<CorporateAction[]> {
+  const accessToken = await getUpstoxTokenWithFallback(supabase);
+  if (!accessToken) return [];
+  const isin = await getIsin(symbol).catch(() => null);
+  if (!isin) return [];
+  const data = await fetchFundamentalsEndpoint<FundamentalsApiEntry[]>(accessToken, isin, "corporate-actions");
+  if (!data) return [];
+  return data.map((a) => ({
+    name: a.name ?? "",
+    exDate: a.expiry_date ?? null,
+    amount: a.amount ?? null,
+    details: a.event_details?.find((d) => d.name === "Details")?.value ?? a.name ?? "",
+  }));
+}
+
 async function fetchFundamentalsEndpoint<T>(
   accessToken: string,
   pathKey: string,

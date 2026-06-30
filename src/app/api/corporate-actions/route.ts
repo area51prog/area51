@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getUpstoxFundamentals } from "@/lib/providers/upstox";
+import { getUpstoxCorporateActionsOnly } from "@/lib/providers/upstox";
 import { classifyCorporateActions } from "@/lib/corporateActions";
 import { CorporateActionRow, ActionType } from "@/lib/types";
 
@@ -36,9 +36,8 @@ async function fetchActionsForSymbol(
   supabase: Awaited<ReturnType<typeof createClient>>,
   symbol: string
 ): Promise<CorporateActionRow[]> {
-  const fundamentals = await getUpstoxFundamentals(supabase, symbol);
-  if (!fundamentals) return [];
-  return classifyCorporateActions(symbol, fundamentals.corporateActions);
+  const actions = await getUpstoxCorporateActionsOnly(supabase, symbol);
+  return classifyCorporateActions(symbol, actions);
 }
 
 export async function GET(req: NextRequest) {
