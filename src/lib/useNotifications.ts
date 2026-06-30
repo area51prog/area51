@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "./auth";
 import { createClient } from "./supabase/client";
 
@@ -20,6 +20,7 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [ready, setReady] = useState(false);
   const [supabase] = useState(() => createClient());
+  const syncedRef = useRef(false);
 
   useEffect(() => {
     if (!user) {
@@ -56,6 +57,14 @@ export function useNotifications() {
     }
 
     load();
+
+    // Sync corporate-action notifications once per session per user
+    if (!syncedRef.current) {
+      syncedRef.current = true;
+      fetch("/api/notifications/sync", { method: "POST" }).then((res) => {
+        if (res.ok) load();
+      }).catch(() => {});
+    }
 
     const channel = supabase
       .channel(`notifications:${user.id}`)

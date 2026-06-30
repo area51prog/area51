@@ -88,6 +88,7 @@ export type Database = {
           body: string | null
           category: string
           created_at: string
+          dedup_key: string | null
           id: string
           read_at: string | null
           title: string
@@ -97,6 +98,7 @@ export type Database = {
           body?: string | null
           category: string
           created_at?: string
+          dedup_key?: string | null
           id?: string
           read_at?: string | null
           title: string
@@ -106,6 +108,7 @@ export type Database = {
           body?: string | null
           category?: string
           created_at?: string
+          dedup_key?: string | null
           id?: string
           read_at?: string | null
           title?: string
