@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Star, FileSearch } from "lucide-react";
+import { Star, FileSearch, Briefcase } from "lucide-react";
 import { getStock } from "@/lib/mock-data";
 import { useWatchlist } from "@/lib/useWatchlist";
-import { usePortfolio } from "@/lib/usePortfolio";
+import { usePortfolio, NewHolding } from "@/lib/usePortfolio";
+import { useProfile } from "@/lib/useProfile";
 import { formatINR, formatINRCompact } from "@/lib/format";
 import { derivePeHistory } from "@/lib/peHistory";
 import { Card, ChangeBadge, ChartModeToggle, PriceAreaChart, RangeSelector, ChartMode } from "@/components/ui";
@@ -41,7 +42,11 @@ export default function StockDetailPage() {
   const mockStock = getStock(symbol);
 
   const { symbols, toggle } = useWatchlist();
-  const { positions } = usePortfolio();
+  const { positions, lists, activePortfolioId, switchPortfolio, buyHolding } = usePortfolio();
+  const { isPremium } = useProfile();
+
+  const [portfolioFlow, setPortfolioFlow] = useState<"closed" | "picking" | "adding">("closed");
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   const [trendRange, setTrendRange] = useState<TrendRange>("1Y");
   const [chartMode, setChartMode] = useState<ChartMode>("price");
@@ -190,8 +195,32 @@ export default function StockDetailPage() {
     };
   }, [symbol]);
 
+  useEffect(() => {
+    if (portfolioFlow !== "picking") return;
+    function handleClickOutside(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPortfolioFlow("closed");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [portfolioFlow]);
+
   if (instrument === undefined) return null;
   if (instrument === null) return notFound();
+
+  function handleAddToPortfolioClick() {
+    if (isPremium && lists.length > 1) {
+      setPortfolioFlow((f) => (f === "picking" ? "closed" : "picking"));
+    } else {
+      setPortfolioFlow("adding");
+    }
+  }
+
+  async function pickPortfolio(id: string) {
+    if (id !== activePortfolioId) await switchPortfolio(id);
+    setPortfolioFlow("adding");
+  }
 
   const inWatchlist = symbols.includes(instrument.symbol);
   const holding = positions.find((p) => p.symbol === instrument.symbol);
@@ -251,16 +280,44 @@ export default function StockDetailPage() {
             <Star size={15} className={inWatchlist ? "text-amber-400 fill-amber-400" : "text-foreground/40"} />
             {inWatchlist ? "In watchlist" : "Add to watchlist"}
           </button>
-          {mockStock && (
+          <div className="relative" ref={pickerRef}>
+            <button
+              type="button"
+              onClick={handleAddToPortfolioClick}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3.5 py-2 text-sm font-medium hover:bg-background"
+            >
+              <Briefcase size={15} className="text-foreground/40" />
+              Add to portfolio
+            </button>
+            {portfolioFlow === "picking" && (
+              <div className="absolute z-20 mt-1 right-0 w-56 rounded-lg border border-line bg-surface shadow-lg p-1.5">
+                {lists.map((l) => (
+                  <button
+                    key={l.id}
+                    type="button"
+                    onClick={() => pickPortfolio(l.id)}
+                    className="w-full text-left text-sm rounded-md px-2.5 py-1.5 hover:bg-background"
+                  >
+                    {l.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {isPremium && (
             <Link
               href={`/dashboard/research/${instrument.symbol}`}
               className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white px-3.5 py-2 text-sm font-semibold hover:bg-brand/90"
             >
-              <FileSearch size={15} /> Research
+              <FileSearch size={15} /> Research Report
             </Link>
           )}
         </div>
       </div>
+
+      {portfolioFlow === "adding" && (
+        <AddStockBox symbol={instrument.symbol} onAdd={buyHolding} onDone={() => setPortfolioFlow("closed")} />
+      )}
 
       <SectionNav
         items={[
@@ -667,5 +724,102 @@ function Row({ label, value }: { label: string; value: string }) {
       <dt className="text-foreground/50 text-xs sm:text-sm">{label}</dt>
       <dd className="font-semibold text-heading">{value}</dd>
     </div>
+  );
+}
+
+function AddStockBox({
+  symbol,
+  onAdd,
+  onDone,
+}: {
+  symbol: string;
+  onAdd: (input: NewHolding) => Promise<{ error?: string }>;
+  onDone: () => void;
+}) {
+  const [quantity, setQuantity] = useState("");
+  const [price, setPrice] = useState("");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const qty = Number(quantity);
+    const priceValue = Number(price);
+    if (!qty || qty <= 0) {
+      setError("Enter a valid quantity.");
+      return;
+    }
+    if (!priceValue || priceValue < 0 || !date) {
+      setError("Enter a valid price and date.");
+      return;
+    }
+    setError("");
+    setSubmitting(true);
+    const { error: addError } = await onAdd({ symbol, quantity: qty, avgPrice: priceValue, buyDate: date });
+    setSubmitting(false);
+    if (addError) {
+      setError(addError);
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <Card title={`Add ${symbol} to portfolio`}>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+        <label className="block">
+          <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Quantity</span>
+          <input
+            autoFocus
+            type="number"
+            min="1"
+            step="1"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="e.g. 10"
+            className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Buy price (₹)</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="e.g. 1295.40"
+            className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs font-semibold text-foreground/70 mb-1.5">Buy date</span>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full rounded-lg border border-line bg-surface text-foreground px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+          />
+        </label>
+        {error && <p className="text-sm text-down sm:col-span-4">{error}</p>}
+        <div className="sm:col-span-4 flex gap-2">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 disabled:opacity-60"
+          >
+            {submitting ? "Adding…" : "Add to portfolio"}
+          </button>
+          <button
+            type="button"
+            onClick={onDone}
+            className="rounded-lg border border-line text-sm font-semibold px-4 py-2 hover:bg-background"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Card>
   );
 }
