@@ -88,7 +88,12 @@ export async function getUpstoxQuotes(
     for (const entry of Object.values(body.data)) {
       const symbol = symbolByInstrumentKey.get(entry.instrument_token);
       if (!symbol) continue;
-      const prevClose = entry.prev_ohlc?.close ?? entry.live_ohlc.close;
+      // Upstox omits prev_ohlc for some instruments; falling back to
+      // live_ohlc.close (today's own price) would make change/changePercent
+      // collapse to ~0, so skip the symbol and let the caller fall back to
+      // Finnhub or the stale cache instead.
+      if (!entry.prev_ohlc) continue;
+      const prevClose = entry.prev_ohlc.close;
       const price = entry.last_price;
       fresh[symbol] = {
         price,
