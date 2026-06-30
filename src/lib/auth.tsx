@@ -55,6 +55,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [supabase] = useState(() => createClient());
 
   useEffect(() => {
+    // Supabase fires onAuthStateChange (e.g. TOKEN_REFRESHED) whenever a tab
+    // regains focus, even when the signed-in user hasn't actually changed.
+    // toUser() allocates a new object every call, so without this guard that
+    // reference churn would needlessly re-run every effect elsewhere that
+    // depends on `user` (e.g. resetting in-session portfolio selection).
+    function applyUser(nextUser: User | null) {
+      setUser((prev) =>
+        prev?.id === nextUser?.id && prev?.email === nextUser?.email && prev?.name === nextUser?.name
+          ? prev
+          : nextUser
+      );
+    }
+
     supabase.auth.getSession().then(async ({ data }) => {
       const session = data.session;
       const noRemember = localStorage.getItem(REMEMBER_ME_KEY) === "false";
@@ -63,15 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Browser restarted with "remember me" off — clear the session.
         await supabase.auth.signOut();
         localStorage.removeItem(REMEMBER_ME_KEY);
-        setUser(null);
+        applyUser(null);
       } else {
-        setUser(toUser(session?.user));
+        applyUser(toUser(session?.user));
       }
       setLoading(false);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(toUser(session?.user));
+      applyUser(toUser(session?.user));
       setLoading(false);
     });
 

@@ -503,7 +503,9 @@ export default function PortfolioPage() {
                             <td colSpan={SORT_COLUMNS.length + 2} className="p-0">
                               <div
                                 className={`overflow-hidden transition-all duration-200 ease-in-out ${
-                                  expanded ? "max-h-[640px] opacity-100" : "max-h-0 opacity-0"
+                                  expanded
+                                    ? `${buySellIntent?.symbol === r.p.symbol ? "max-h-[1100px]" : "max-h-[640px]"} opacity-100`
+                                    : "max-h-0 opacity-0"
                                 }`}
                               >
                                 <HoldingTransactionPanel
@@ -515,6 +517,18 @@ export default function PortfolioPage() {
                                   onUpdateTransaction={updateTransaction}
                                   onBuy={() => setBuySellIntent({ symbol: r.p.symbol, side: "buy" })}
                                   onSell={() => setBuySellIntent({ symbol: r.p.symbol, side: "sell" })}
+                                  buySellForm={
+                                    buySellIntent?.symbol === r.p.symbol ? (
+                                      <BuySellForm
+                                        symbol={buySellIntent.symbol}
+                                        initialSide={buySellIntent.side}
+                                        position={positions.find((p) => p.symbol === buySellIntent.symbol) ?? null}
+                                        onBuy={buyHolding}
+                                        onSell={sellHolding}
+                                        onDone={() => setBuySellIntent(null)}
+                                      />
+                                    ) : null
+                                  }
                                 />
                               </div>
                             </td>
@@ -529,17 +543,6 @@ export default function PortfolioPage() {
           </Card>
         </>
       )}
-
-      {buySellIntent && (
-        <BuySellForm
-          symbol={buySellIntent.symbol}
-          initialSide={buySellIntent.side}
-          position={positions.find((p) => p.symbol === buySellIntent.symbol) ?? null}
-          onBuy={buyHolding}
-          onSell={sellHolding}
-          onDone={() => setBuySellIntent(null)}
-        />
-      )}
     </div>
   );
 }
@@ -551,6 +554,7 @@ function HoldingTransactionPanel({
   onUpdateTransaction,
   onBuy,
   onSell,
+  buySellForm,
 }: {
   symbol: string;
   currentPrice: number | null;
@@ -558,6 +562,7 @@ function HoldingTransactionPanel({
   onUpdateTransaction: (id: string, input: { quantity: number; price: number; txnDate: string }) => Promise<{ error?: string }>;
   onBuy: () => void;
   onSell: () => void;
+  buySellForm: React.ReactNode;
 }) {
   const sorted = [...transactions].sort((a, b) => b.txnDate.localeCompare(a.txnDate));
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -731,6 +736,7 @@ function HoldingTransactionPanel({
           Sell
         </button>
       </div>
+      {buySellForm}
     </div>
   );
 }
