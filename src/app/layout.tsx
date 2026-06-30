@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Quicksand } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/lib/theme";
+import CookieBanner from "@/components/CookieBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,7 +55,10 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            {children}
+            <CookieBanner />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
