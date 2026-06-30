@@ -1,5 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { getValidUpstoxAccessToken } from "@/lib/upstoxToken";
+import { getUpstoxTokenWithFallback } from "@/lib/upstoxToken";
 import { getInstrumentKeys, getInstrumentKey, getIsin, lookupByInstrumentKey } from "@/lib/providers/instruments";
 import { readStaleCache, readStaleCacheMany, writeStaleCache, writeStaleCacheMany, StaleEntry } from "@/lib/staleCache";
 import { Database } from "@/lib/supabase/database.types";
@@ -51,7 +51,7 @@ export async function getUpstoxQuotes(
 
   if (toFetch.length === 0) return result;
 
-  const accessToken = await getValidUpstoxAccessToken(supabase);
+  const accessToken = await getUpstoxTokenWithFallback(supabase);
   if (!accessToken) return result;
 
   let instrumentMap: Map<string, string>;
@@ -162,7 +162,7 @@ export async function getUpstoxFullQuote(
   const cached = fullQuoteCache.get(symbol);
   if (cached && Date.now() - cached.fetchedAt < QUOTE_CACHE_TTL_MS) return cached.quote;
 
-  const accessToken = await getValidUpstoxAccessToken(supabase);
+  const accessToken = await getUpstoxTokenWithFallback(supabase);
   if (!accessToken) return null;
 
   const instrumentKey = await getInstrumentKey(symbol).catch(() => null);
@@ -256,7 +256,7 @@ export async function getUpstoxHistoricalCandles(
   const cached = candleCache.get(cacheKey);
   if (cached && Date.now() - cached.fetchedAt < CANDLE_CACHE_TTL_MS[range]) return cached.candles;
 
-  const accessToken = await getValidUpstoxAccessToken(supabase);
+  const accessToken = await getUpstoxTokenWithFallback(supabase);
   if (!accessToken) return [];
 
   const instrumentKey = await getInstrumentKey(symbol).catch(() => null);
@@ -403,7 +403,7 @@ async function fetchUpstoxFundamentals(
   supabase: SupabaseClient<Database>,
   symbol: string
 ): Promise<CompanyFundamentals | null> {
-  const accessToken = await getValidUpstoxAccessToken(supabase);
+  const accessToken = await getUpstoxTokenWithFallback(supabase);
   if (!accessToken) return null;
 
   const isin = await getIsin(symbol).catch(() => null);

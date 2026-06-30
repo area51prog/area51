@@ -64,6 +64,14 @@ export async function getValidUpstoxAccessToken(supabase: Client): Promise<strin
   return token.accessToken;
 }
 
+// Returns the user's OAuth token if valid, otherwise falls back to the
+// app-level analytics token (long-lived, for market/fundamentals data).
+export async function getUpstoxTokenWithFallback(supabase: Client): Promise<string | null> {
+  const userToken = await getValidUpstoxAccessToken(supabase);
+  if (userToken) return userToken;
+  return process.env.UPSTOX_ANALYTICS_TOKEN ?? null;
+}
+
 export async function clearUpstoxToken(supabase: Client): Promise<void> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData.user?.id;
