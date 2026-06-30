@@ -13,6 +13,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [captchaToken, setCaptchaToken] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -31,7 +32,7 @@ export default function LoginPage() {
     setError("");
     setSubmitting(true);
     try {
-      await login(email, password, captchaToken);
+      await login(email, password, captchaToken, rememberMe);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to log in.");
@@ -71,6 +72,15 @@ export default function LoginPage() {
             className="w-full rounded-lg border border-line bg-surface text-foreground px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
           />
         </Field>
+        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="w-4 h-4 rounded border-line accent-brand cursor-pointer"
+          />
+          <span className="text-sm text-foreground/70">Remember me</span>
+        </label>
         <Captcha ref={captchaRef} onVerify={setCaptchaToken} />
         {error && <p className="text-sm text-down">{error}</p>}
         <button

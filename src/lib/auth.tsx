@@ -20,12 +20,18 @@ interface User {
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string, captchaToken: string) => Promise<void>;
+  login: (email: string, password: string, captchaToken: string, rememberMe?: boolean) => Promise<void>;
   signup: (name: string, email: string, phone: string, password: string, captchaToken: string) => Promise<void>;
   logout: () => Promise<void>;
   requestPasswordReset: (email: string, captchaToken: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
 }
+
+// These keys implement "remember me = off": a persistent flag tells us the user
+// opted out; a sessionStorage sentinel proves the browser hasn't been restarted.
+// On load: flag present + sentinel missing → new browser session → auto sign-out.
+const REMEMBER_ME_KEY = "remember_me";
+const SESSION_ALIVE_KEY = "session_alive";
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -49,8 +55,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [supabase] = useState(() => createClient());
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(toUser(data.session?.user));
+    supabase.auth.getSession().then(async ({ data }) => {
+      const session = data.session;
+      const noRemember = localStorage.getItem(REMEMBER_ME_KEY) === "false";
+      const alive = sessionStorage.getItem(SESSION_ALIVE_KEY);
+      if (session && noRemember && !alive) {
+        // Browser restarted with "remember me" off — clear the session.
+        await supabase.auth.signOut();
+        localStorage.removeItem(REMEMBER_ME_KEY);
+        setUser(null);
+      } else {
+        setUser(toUser(session?.user));
+      }
       setLoading(false);
     });
 
@@ -62,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.subscription.unsubscribe();
   }, [supabase]);
 
-  async function login(email: string, password: string, captchaToken: string) {
+  async function login(email: string, password: string, captchaToken: string, rememberMe = true) {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -80,6 +96,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
         throw new Error("Your account has been suspended. Contact support for help.");
       }
+    }
+
+    if (rememberMe) {
+      localStorage.removeItem(REMEMBER_ME_KEY);
+      sessionStorage.removeItem(SESSION_ALIVE_KEY);
+    } else {
+      localStorage.setItem(REMEMBER_ME_KEY, "false");
+      sessionStorage.setItem(SESSION_ALIVE_KEY, "1");
     }
   }
 
@@ -99,6 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     await supabase.auth.signOut();
+    localStorage.removeItem(REMEMBER_ME_KEY);
+    sessionStorage.removeItem(SESSION_ALIVE_KEY);
   }
 
   async function requestPasswordReset(email: string, captchaToken: string) {
