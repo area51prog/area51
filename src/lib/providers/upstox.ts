@@ -16,11 +16,11 @@ import {
   Competitor,
 } from "@/lib/types";
 
-interface OhlcEntry {
+interface QuoteEntry {
   last_price: number;
   instrument_token: string;
-  prev_ohlc: { open: number; high: number; low: number; close: number } | null;
-  live_ohlc: { open: number; high: number; low: number; close: number };
+  net_change: number;
+  ohlc: { open: number; high: number; low: number; close: number };
 }
 
 export type TrendRange = "1D" | "1W" | "1M" | "1Y" | "5Y";
@@ -73,7 +73,7 @@ export async function getUpstoxQuotes(
 
   try {
     const res = await fetch(
-      `https://api.upstox.com/v3/market-quote/ohlc?instrument_key=${encodeURIComponent(instrumentKeys)}&interval=1d`,
+      `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(instrumentKeys)}`,
       {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
         cache: "no-store",
@@ -81,26 +81,25 @@ export async function getUpstoxQuotes(
     );
     if (!res.ok) return result;
 
-    const body: { status: string; data?: Record<string, OhlcEntry> } = await res.json();
+    const body: { status: string; data?: Record<string, QuoteEntry> } = await res.json();
     if (body.status !== "success" || !body.data) return result;
 
     const fresh: Record<string, LiveQuote> = {};
     for (const entry of Object.values(body.data)) {
       const symbol = symbolByInstrumentKey.get(entry.instrument_token);
       if (!symbol) continue;
-      // Upstox omits prev_ohlc for some instruments; falling back to
-      // live_ohlc.close (today's own price) would make change/changePercent
-      // collapse to ~0, so skip the symbol and let the caller fall back to
-      // Finnhub or the stale cache instead.
-      if (!entry.prev_ohlc) continue;
-      const prevClose = entry.prev_ohlc.close;
       const price = entry.last_price;
+      // This endpoint's `ohlc.close` reflects today's own (still-forming) close,
+      // not the prior session's — using it as prevClose collapses change/
+      // changePercent toward 0. `net_change` is computed server-side against the
+      // true previous close, so derive prevClose from that instead.
+      const prevClose = price - entry.net_change;
       fresh[symbol] = {
         price,
-        change: price - prevClose,
-        changePercent: prevClose ? ((price - prevClose) / prevClose) * 100 : null,
-        high: entry.live_ohlc.high,
-        low: entry.live_ohlc.low,
+        change: entry.net_change,
+        changePercent: prevClose ? (entry.net_change / prevClose) * 100 : null,
+        high: entry.ohlc.high,
+        low: entry.ohlc.low,
         prevClose,
       };
     }
@@ -188,7 +187,10 @@ export async function getUpstoxFullQuote(
 
     const quote: FullQuote = {
       price: entry.last_price,
-      prevClose: entry.ohlc.close,
+      // `ohlc.close` here is today's own (still-forming) close, not the prior
+      // session's — derive the true previous close from `net_change` instead,
+      // which Upstox computes server-side against the actual previous close.
+      prevClose: entry.last_price - entry.net_change,
       high: entry.ohlc.high,
       low: entry.ohlc.low,
       open: entry.ohlc.open,
