@@ -15,12 +15,18 @@ const TITLES: Record<string, string> = {
   "/dashboard/events": "Events",
   "/dashboard/settings": "Account settings",
   "/dashboard/support": "Support",
+  "/dashboard/admin": "Admin dashboard",
+  "/dashboard/admin/users": "Admin · Users",
+  "/dashboard/admin/usage": "Admin · API usage",
+  "/dashboard/admin/health": "Admin · Health",
+  "/dashboard/admin/audit": "Admin · Audit log",
 };
 
 function titleFor(pathname: string) {
   if (TITLES[pathname]) return TITLES[pathname];
   if (pathname.startsWith("/dashboard/stocks/")) return "Stock detail";
   if (pathname.startsWith("/dashboard/research/")) return "Research report";
+  if (pathname.startsWith("/dashboard/admin")) return "Admin dashboard";
   return "Alloqo";
 }
 

@@ -14,6 +14,81 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_audit_log: {
+        Row: {
+          action: string
+          actor_email: string | null
+          actor_id: string | null
+          created_at: string
+          detail: Json | null
+          id: number
+          target_id: string | null
+          target_type: string | null
+        }
+        Insert: {
+          action: string
+          actor_email?: string | null
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json | null
+          id?: never
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Update: {
+          action?: string
+          actor_email?: string | null
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json | null
+          id?: never
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Relationships: []
+      }
+      api_usage_log: {
+        Row: {
+          cost_usd: number | null
+          created_at: string
+          endpoint: string
+          id: number
+          input_tokens: number | null
+          latency_ms: number | null
+          model: string | null
+          output_tokens: number | null
+          provider: string
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          cost_usd?: number | null
+          created_at?: string
+          endpoint: string
+          id?: never
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string | null
+          output_tokens?: number | null
+          provider: string
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          cost_usd?: number | null
+          created_at?: string
+          endpoint?: string
+          id?: never
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string | null
+          output_tokens?: number | null
+          provider?: string
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           default_signup_tier: string
@@ -386,7 +461,6 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: Record<string, unknown>
       }
-      is_admin: { Args: { uid: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
