@@ -3,6 +3,7 @@ import { getUpstoxQuotes, getStaleUpstoxQuotes } from "@/lib/providers/upstox";
 import { getFinnhubQuotes } from "@/lib/providers/finnhub";
 import { createClient } from "@/lib/supabase/server";
 import { LiveQuote, QuoteSource } from "@/lib/types";
+import { logApiUsage } from "@/lib/adminLog";
 
 export async function GET(req: NextRequest) {
   const symbolsParam = req.nextUrl.searchParams.get("symbols");
@@ -21,19 +22,33 @@ export async function GET(req: NextRequest) {
   // didn't cover. Symbols neither provider has data for stay unset — the
   // client falls back to mock data for those.
   const supabase = await createClient();
+  const upstoxStart = Date.now();
   const upstoxQuotes = await getUpstoxQuotes(supabase, symbols);
   for (const symbol of Object.keys(upstoxQuotes)) {
     quotes[symbol] = upstoxQuotes[symbol];
     sources[symbol] = "upstox";
   }
+  void logApiUsage({
+    provider: "upstox",
+    endpoint: "quotes",
+    status: Object.keys(upstoxQuotes).length > 0 ? "ok" : "error",
+    latencyMs: Date.now() - upstoxStart,
+  });
 
   const remaining = symbols.filter((s) => !quotes[s]);
   if (remaining.length > 0) {
+    const finnhubStart = Date.now();
     const finnhubQuotes = await getFinnhubQuotes(remaining);
     for (const symbol of Object.keys(finnhubQuotes)) {
       quotes[symbol] = finnhubQuotes[symbol];
       sources[symbol] = "finnhub";
     }
+    void logApiUsage({
+      provider: "finnhub",
+      endpoint: "quotes",
+      status: Object.keys(finnhubQuotes).length > 0 ? "ok" : "error",
+      latencyMs: Date.now() - finnhubStart,
+    });
   }
 
   // Neither Upstox nor Finnhub had data — most likely an expired Upstox

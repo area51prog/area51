@@ -3,6 +3,9 @@ import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { resolveStock } from "@/lib/resolveStock";
 import { Stock, ResearchReport } from "@/lib/types";
+import { logApiUsage, estimateAnthropicCost } from "@/lib/adminLog";
+
+const RESEARCH_MODEL = "claude-sonnet-4-6";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -161,10 +164,11 @@ export async function POST(req: NextRequest) {
   const { stock, extraContext } = resolved;
 
   const client = new Anthropic({ apiKey });
+  const startedAt = Date.now();
 
   try {
     const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: RESEARCH_MODEL,
       max_tokens: 4096,
       tools: [
         {
@@ -175,6 +179,20 @@ export async function POST(req: NextRequest) {
       ],
       tool_choice: { type: "tool", name: "submit_research_report" },
       messages: [{ role: "user", content: buildPrompt(stock, extraContext) }],
+    });
+
+    const inputTokens = message.usage?.input_tokens ?? null;
+    const outputTokens = message.usage?.output_tokens ?? null;
+    void logApiUsage({
+      provider: "anthropic",
+      endpoint: "research.generate",
+      userId: userData.user.id,
+      model: RESEARCH_MODEL,
+      inputTokens,
+      outputTokens,
+      costUsd: estimateAnthropicCost(RESEARCH_MODEL, inputTokens, outputTokens),
+      status: "ok",
+      latencyMs: Date.now() - startedAt,
     });
 
     const toolUse = message.content.find((block) => block.type === "tool_use");
@@ -204,6 +222,14 @@ export async function POST(req: NextRequest) {
 
     return Response.json({ ok: true, report, generatedAt: new Date().toISOString(), stale: false });
   } catch (err) {
+    void logApiUsage({
+      provider: "anthropic",
+      endpoint: "research.generate",
+      userId: userData.user.id,
+      model: RESEARCH_MODEL,
+      status: "error",
+      latencyMs: Date.now() - startedAt,
+    });
     const message = err instanceof Error ? err.message : "Anthropic request failed";
     return Response.json({ ok: false, error: message }, { status: 502 });
   }

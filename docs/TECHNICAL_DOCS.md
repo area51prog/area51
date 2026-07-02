@@ -180,6 +180,33 @@ Write-through cache populated by every successful call in `src/lib/providers/ups
 | `id` | `boolean` (PK) | singleton row |
 | `default_signup_tier` | `string` | `'free' \| 'premium'`, default applied |
 
+### `api_usage_log`
+Admin-dashboard instrumentation — one row per external API call. Written server-side (fire-and-forget) by `logApiUsage()` in `src/lib/adminLog.ts`; read only by admins (RLS `is_admin(auth.uid())`).
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `bigint` (PK) | identity |
+| `user_id` | `string \| null` | FK `auth.users` (set null on delete) |
+| `provider` | `string` | `'anthropic' \| 'upstox' \| 'finnhub' \| 'resend'` |
+| `endpoint` | `string` | e.g. `research.generate`, `quotes` |
+| `model` | `string \| null` | e.g. `claude-sonnet-4-6` |
+| `input_tokens` / `output_tokens` | `int \| null` | Anthropic only |
+| `cost_usd` | `numeric \| null` | estimated Anthropic cost (see `estimateAnthropicCost`) |
+| `status` | `string` | `'ok' \| 'error'` |
+| `latency_ms` | `int \| null` | |
+| `created_at` | `timestamptz` | default `now()`; indexed by `(provider, created_at)` and `(user_id, created_at)` |
+
+### `admin_audit_log`
+Admin-dashboard audit trail — one row per admin mutation. Written by `logAdminAction()` in `src/lib/adminLog.ts`; admin-read via RLS.
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `bigint` (PK) | identity |
+| `actor_id` | `string \| null` | admin who performed the action |
+| `actor_email` | `string \| null` | |
+| `action` | `string` | e.g. `user.invite`, `user.update`, `user.delete`, `user.bulk_suspend` |
+| `target_type` / `target_id` | `string \| null` | |
+| `detail` | `jsonb \| null` | changed fields / payload |
+| `created_at` | `timestamptz` | default `now()`; indexed by `created_at` |
+
 ### Foreign keys
 - `portfolio_holdings.portfolio_id` → `portfolios.id`
 - `transactions.portfolio_id` → `portfolios.id`
@@ -188,8 +215,10 @@ Write-through cache populated by every successful call in `src/lib/providers/ups
 ### Postgres functions
 | Function | Args | Returns | Purpose |
 |---|---|---|---|
-| `is_admin` | `uid: string` | `boolean` | checks if a user has the `administrator` role |
-| `get_user_limits` | `p_user_id: string` | `Record<string, unknown>` | retrieves tier-based limits (e.g. max portfolios) |
+| `private.is_admin` | `uid: string` | `boolean` | checks if a user has the `administrator` role. Lives in the non-REST-exposed `private` schema (so it can't be called via `/rest/v1/rpc`) and stays `SECURITY DEFINER` to avoid RLS recursion on `profiles`; referenced by the admin RLS policies on `profiles`, `api_usage_log`, and `admin_audit_log`. `requireAdmin()` in app code checks `profiles.role` directly rather than calling this. |
+| `get_user_limits` | `p_user_id: string` | `Record<string, unknown>` | retrieves tier-based limits (e.g. max portfolios). REST/RPC `EXECUTE` is revoked (invoked internally only). |
+
+Trigger functions (`enforce_*_quota`, `notify_*`, `handle_new_user`, `prevent_delete_last_list`) are `SECURITY DEFINER` and have had their REST/RPC `EXECUTE` grants revoked from `anon`/`authenticated` — they still fire as triggers but can no longer be called directly via the API.
 
 ### Row-Level Security
 All user-scoped tables (`watchlists`, `watchlist`, `portfolios`, `portfolio_holdings`, `transactions`, `notifications`, `upstox_tokens`) enforce:
@@ -197,6 +226,8 @@ All user-scoped tables (`watchlists`, `watchlist`, `portfolios`, `portfolio_hold
 auth.uid() = user_id
 ```
 on both `USING` and `WITH CHECK` clauses. `research_reports`, `dividend_cache`, `market_data_cache`, `stock_price_history`, and `app_settings` are shared/cached data, not user-scoped — readable/writable by any authenticated user. Note: `research_reports.generated_by` is tracked but the table itself isn't RLS-scoped by user; visibility filtering for "your reports" is done client-side in `useResearch()` (see §8).
+
+`api_usage_log` and `admin_audit_log` are **admin-read-only**: a single `SELECT` policy `USING (is_admin(auth.uid()))` and no client insert/update/delete policies. All writes go through the service-role client (`createAdminClient()`), which bypasses RLS.
 
 ---
 
@@ -281,15 +312,25 @@ Backed by `dividend_cache` with a 24-hour TTL (corporate actions rarely change p
 
 Tokens expire daily at 3:30am IST — see [`upstoxToken.ts`](../src/lib/upstoxToken.ts) for lifecycle helpers.
 
-### Admin Console
+### Admin Dashboard
 
 | Route | Method | Body/Params | Auth | Response |
 |---|---|---|---|---|
-| `/api/admin/users` | GET | — | admin only | `{ ok, users: [{id, email, full_name, created_at, last_sign_in_at, role, tier, status}] }` |
-| `/api/admin/users` | POST | `{ email, full_name?, role, tier }` | admin only | `{ ok }` (invites a new user) |
-| `/api/admin/users/[id]` | PATCH | `{ role?, tier?, status?, full_name?, notification_prefs? }` | admin only | `{ ok }` |
+| `/api/admin/stats` | GET | — | admin only | `{ ok, stats: { totalUsers, premiumUsers, freeUsers, suspendedUsers, adminUsers, portfolios, holdings, reports, reports30d, signups[], topSymbols[] } }` |
+| `/api/admin/usage` | GET | `provider?`, `days?` (default 30) | admin only | `{ ok, usage: { byProvider[], timeSeries[], cost{today,window,allTime,inputTokens,outputTokens}, topUsers[], recentErrors[] } }` from `api_usage_log` |
+| `/api/admin/health` | GET | — | admin only | `{ ok, health: { tokens{total,expired}, marketDataCache, corporateActions, errorRates[] } }` |
+| `/api/admin/audit` | GET | `page?` | admin only | `{ ok, entries[], total, page, pageSize }` from `admin_audit_log` |
+| `/api/admin/users` | GET | `search?`, `role?`, `tier?`, `status?`, `sort?` (`field:asc\|desc`), `page?` | admin only | `{ ok, users[], total, page, pageSize }` (server-side filter/sort/paginate) |
+| `/api/admin/users` | POST | `{ email, full_name?, role, tier }` | admin only | `{ ok }` (invites a new user; audit-logged) |
+| `/api/admin/users/[id]` | GET | — | admin only | `{ ok, detail: { …user, counts{portfolios,watchlists,holdings,reports}, lastApiActivity } }` |
+| `/api/admin/users/[id]` | PATCH | `{ role?, tier?, status?, full_name?, notification_prefs? }` | admin only | `{ ok }` (audit-logged) |
+| `/api/admin/users/[id]` | DELETE | — | admin only | `{ ok }` (audit-logged) |
+| `/api/admin/users/export` | GET | — | admin only | CSV download of all users |
+| `/api/admin/users/bulk` | POST | `{ ids[], action: 'suspend'\|'activate'\|'set_tier', tier? }` | admin only | `{ ok, updated }` (audit-logged) |
 
-Admin routes are gated by a `requireAdmin()` middleware that checks the `is_admin(uid)` Postgres function, and use the service-role Supabase client (`src/lib/supabase/admin.ts`) server-side only.
+Admin routes are gated by a `requireAdmin()` middleware that checks the `is_admin(uid)` Postgres function, and use the service-role Supabase client (`src/lib/supabase/admin.ts`) server-side only. Instrumentation for `stats`/`usage`/`health` is captured by `logApiUsage()`/`logAdminAction()` in [`src/lib/adminLog.ts`](../src/lib/adminLog.ts), wired into `/api/research` (Anthropic cost/tokens), `/api/quotes` (Upstox/Finnhub), `/api/support` (Resend), and the admin mutation routes (audit).
+
+The UI is a multi-page section under `/dashboard/admin/` — `layout.tsx` gates on `isAdmin` and renders `AdminSubNav`; pages are Overview (`page.tsx`), `users/`, `usage/`, `health/`, `audit/`, with shared parts in `dashboard/admin/_components/`. Data is fetched via the `useAdminData()` hook in [`src/lib/useAdminData.ts`](../src/lib/useAdminData.ts).
 
 ---
 
@@ -331,7 +372,11 @@ Admin routes are gated by a `requireAdmin()` middleware that checks the `is_admi
 | `/dashboard/research/[symbol]` | `research/[symbol]/page.tsx` | View/download a research report (PDF) |
 | `/dashboard/analytics` | `analytics/page.tsx` | Portfolio performance analytics |
 | `/dashboard/settings` | `settings/page.tsx` | Account settings, Upstox connection |
-| `/dashboard/admin` | `admin/page.tsx` | User management console (admin only) |
+| `/dashboard/admin` | `admin/layout.tsx` + `admin/page.tsx` | Admin dashboard (admin only) — Overview KPIs/charts; sub-nav to the pages below |
+| `/dashboard/admin/users` | `admin/users/page.tsx` | User management: search/filter/sort/paginate, bulk actions, CSV export, per-user detail drawer |
+| `/dashboard/admin/usage` | `admin/usage/page.tsx` | API usage & Anthropic cost analytics |
+| `/dashboard/admin/health` | `admin/health/page.tsx` | Token expiry, cache freshness, API error rates |
+| `/dashboard/admin/audit` | `admin/audit/page.tsx` | Admin action audit log |
 | `/dashboard/support` | `support/page.tsx` | Help & support |
 
 ---

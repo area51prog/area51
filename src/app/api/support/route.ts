@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
+import { logApiUsage } from "@/lib/adminLog";
 
 const SUPPORT_EMAIL = "support@alloqo.com";
 
@@ -27,12 +28,21 @@ export async function POST(request: Request) {
   }
 
   const resend = new Resend(process.env.RESEND_API_KEY);
+  const resendStart = Date.now();
   const { error } = await resend.emails.send({
     from: "Alloqo Support <onboarding@resend.dev>",
     to: SUPPORT_EMAIL,
     replyTo: userEmail,
     subject: `[Support] ${subject}`,
     text: `Name: ${name}\nEmail: ${userEmail}\nPhone: ${phone}\n\n${message}`,
+  });
+
+  void logApiUsage({
+    provider: "resend",
+    endpoint: "support.contact",
+    userId: data.user?.id,
+    status: error ? "error" : "ok",
+    latencyMs: Date.now() - resendStart,
   });
 
   if (error) {
