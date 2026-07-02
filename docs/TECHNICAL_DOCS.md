@@ -26,7 +26,7 @@ Area51 is a web app for tracking and researching Indian equities (NSE/BSE). User
 | CAPTCHA | Cloudflare Turnstile (`@marsidev/react-turnstile`) | ^1.5.3 |
 | Class merging | `clsx` | ^2.1.1 |
 | Linting | ESLint (`eslint-config-next`) | ^9 / 16.2.9 |
-| Hosting | Vercel (frontend + serverless API routes) | |
+| Hosting | Hostinger | |
 | Live market data | Upstox API (primary, NSE), Finnhub API (fallback, US tickers) | |
 
 **npm scripts** (`package.json`): `dev`, `build`, `start`, `lint`.
@@ -425,7 +425,7 @@ From `.env.example` (copy to `.env.local`, gitignored):
 
 ## 12. Infrastructure & Deployment
 
-- **Frontend + API:** Vercel (Next.js App Router; API routes run as serverless functions). Local `.vercel/` config present.
+- **Frontend + API:** Hostinger (Next.js App Router; API routes run server-side).
 - **Database/Auth:** Supabase (hosted Postgres + Auth).
 - **Third-party services:** Anthropic Claude API (research generation), Upstox API (OAuth2, live NSE data), Finnhub API (fallback quotes), Cloudflare Turnstile (CAPTCHA).
 - **Local-only state:** `.data/` holds a local Upstox token cache (gitignored); production tokens live in the `upstox_tokens` table.
