@@ -45,6 +45,7 @@ src/
 ├── components/                # Shared React components (+ components/landing/)
 └── lib/
     ├── providers/             # upstox.ts, finnhub.ts, instruments.ts
+    ├── brokers/                # Broker CSV adapters + normalizeCsv (Zerodha/Groww/Upstox/Angel One/ICICI + native)
     ├── supabase/               # client.ts, server.ts, admin.ts, database.types.ts
     ├── use*.ts                 # Custom hooks (data + UI state)
     ├── types.ts                # Domain TypeScript interfaces
@@ -300,6 +301,7 @@ Backed by `dividend_cache` with a 24-hour TTL (corporate actions rarely change p
 |---|---|---|---|
 | `/api/symbols/search` | GET | `q=` (≤40 chars) | `{ ok, results: Instrument[] }` |
 | `/api/symbols/lookup` | GET | `symbol=` | `{ ok, instrument: Instrument \| null }` |
+| `/api/symbols/resolve` | POST (auth) | `{ items: [{ symbol, isin }] }` (≤500) | `{ ok, results: [{ symbol, isin, resolvedSymbol, exchange, resolved }] }` — resolves broker CSV symbols/ISINs to canonical trading symbols (ISIN first, then symbol lookup) for bulk import |
 
 ### Upstox OAuth Integration
 
@@ -364,7 +366,7 @@ The UI is a multi-page section under `/dashboard/admin/` — `layout.tsx` gates 
 |---|---|---|
 | `/dashboard` | `dashboard/page.tsx` | Overview: market snapshot, net worth, asset allocation |
 | `/dashboard/watchlist` | `watchlist/page.tsx` | Watchlist management (multi-list), sortable columns |
-| `/dashboard/portfolio` | `portfolio/page.tsx` | Multi-portfolio (premium), per-portfolio summary table with totals on the All Portfolios view (premium, 2+ portfolios), sortable holdings table (defaults to Stock A-Z, autofocused Add holding form), allocation chart (sub-5% holdings grouped into "Others"), P&L, research-rating dot (premium only) and report icon next to each stock, expandable per-stock transaction history with editable transactions and single buy/sell, multi-row add holding, CSV bulk import |
+| `/dashboard/portfolio` | `portfolio/page.tsx` | Multi-portfolio (premium), per-portfolio summary table with totals on the All Portfolios view (premium, 2+ portfolios), sortable holdings table (defaults to Stock A-Z, autofocused Add holding form), allocation chart (sub-5% holdings grouped into "Others"), P&L, research-rating dot (premium only) and report icon next to each stock, expandable per-stock transaction history with editable transactions and single buy/sell, multi-row add holding, broker-agnostic CSV bulk import (auto-detects Zerodha/Groww/Upstox/Angel One/ICICI Direct tradebooks + native template, with a manual review/edit stage before applying) |
 | `/dashboard/transactions` | `transactions/page.tsx` | Buy/sell history with realized P&L, sortable columns, collapsible month cards (current month expanded by default) |
 | `/dashboard/dividends` | `dividends/page.tsx` | Upcoming dividends, projected annual income |
 | `/dashboard/stocks/[symbol]` | `stocks/[symbol]/page.tsx` | Quote, chart, fundamentals, depth |
@@ -390,7 +392,7 @@ No global state library — React Context (`AuthContext`) plus domain-specific c
 | `useAuth()` | login/signup/logout/password reset, current user |
 | `useProfile()` | tier, role, status, `isPremium`, `isAdmin` |
 | `useWatchlist()` | CRUD on watchlists/entries; active list persisted in `localStorage` (`area51_active_watchlist`) |
-| `usePortfolio()` | multi-portfolio CRUD, position aggregation (qty/avg cost per symbol), single and bulk add (`bulkAddHoldings`), buy/sell |
+| `usePortfolio()` | multi-portfolio CRUD, position aggregation (qty/avg cost per symbol), single and bulk add (`bulkAddHoldings`), buy/sell, FIFO trade-replay import from broker CSVs (`importTrades` — replays buys/sells chronologically, buys create lots, sells consume FIFO with realized P&L via the shared `consumeFifo` helper) |
 | `useQuotes()` | batch live-quote fetch |
 | `useTransactions()` | transaction history |
 | `useDividends()` | dividend events for held symbols |

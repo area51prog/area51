@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Plus, Trash2, Upload, ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, Sparkles, Pencil, Check, X } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getStock } from "@/lib/mock-data";
-import { usePortfolio, SUMMARY_ID, Position, NewHolding } from "@/lib/usePortfolio";
+import { usePortfolio, SUMMARY_ID, Position, NewHolding, ImportTrade } from "@/lib/usePortfolio";
 import { useProfile } from "@/lib/useProfile";
 import { useQuotes } from "@/lib/useQuotes";
 import { useTransactions, Transaction } from "@/lib/useTransactions";
@@ -15,7 +15,8 @@ import { Exchange, Stock } from "@/lib/types";
 import { formatINR, formatINRCompact, formatDate } from "@/lib/format";
 import { Card, ChangeBadge, LiveBadge, RatingDot, Stat } from "@/components/ui";
 import { ListSwitcher } from "@/components/ListSwitcher";
-import { parseCsv, validateBulkRows, bulkUploadTemplate, BulkRowError } from "@/lib/csv";
+import { bulkUploadTemplate } from "@/lib/csv";
+import { normalizeCsv, CanonicalTrade, BrokerRowError } from "@/lib/brokers";
 
 const COLORS = ["#1a2348", "#4f46e5", "#7c83e8", "#a5abf2", "#c8ccf8", "#15803d"];
 
@@ -51,6 +52,7 @@ export default function PortfolioPage() {
     ready,
     buyHolding,
     bulkAddHoldings,
+    importTrades,
     sellHolding,
     deletePosition,
   } = usePortfolio();
@@ -296,7 +298,7 @@ export default function PortfolioPage() {
 
       {bulkUploading && (
         <BulkUploadForm
-          onUpload={bulkAddHoldings}
+          onImport={importTrades}
           onDone={() => setBulkUploading(false)}
         />
       )}
@@ -972,18 +974,42 @@ function HoldingStockSearch({
   );
 }
 
+interface ReviewRow {
+  key: string;
+  brokerSymbol: string;
+  symbol: string;
+  side: "buy" | "sell";
+  quantity: number;
+  price: number;
+  tradeDate: string;
+  resolved: boolean;
+}
+
+function isReviewRowValid(r: ReviewRow): boolean {
+  if (!r.symbol.trim()) return false;
+  if (!Number.isFinite(r.quantity) || r.quantity <= 0) return false;
+  if (!Number.isFinite(r.price) || r.price < 0) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(r.tradeDate) || Number.isNaN(new Date(r.tradeDate).getTime())) return false;
+  return true;
+}
+
 function BulkUploadForm({
-  onUpload,
+  onImport,
   onDone,
 }: {
-  onUpload: (inputs: NewHolding[]) => Promise<{ inserted: number; error?: string }>;
+  onImport: (trades: ImportTrade[]) => Promise<{ inserted: number; sold: number; skipped: number; error?: string }>;
   onDone: () => void;
 }) {
   const [fileName, setFileName] = useState("");
-  const [validRows, setValidRows] = useState<NewHolding[]>([]);
-  const [rowErrors, setRowErrors] = useState<BulkRowError[]>([]);
+  const [brokerName, setBrokerName] = useState<string | null>(null);
+  const [parseErrors, setParseErrors] = useState<BrokerRowError[]>([]);
+  const [reviewRows, setReviewRows] = useState<ReviewRow[]>([]);
+  const [parsing, setParsing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ inserted: number; error?: string } | null>(null);
+  const [result, setResult] = useState<{ inserted: number; sold: number; skipped: number; error?: string } | null>(null);
+
+  const allValid = reviewRows.length > 0 && reviewRows.every(isReviewRowValid);
+  const unresolvedCount = reviewRows.filter((r) => !r.resolved).length;
 
   function handleDownloadTemplate() {
     const blob = new Blob([bulkUploadTemplate()], { type: "text/csv" });
@@ -995,81 +1021,244 @@ function BulkUploadForm({
     URL.revokeObjectURL(url);
   }
 
+  // Resolve broker symbols/ISINs to the app's canonical trading symbols.
+  // Returns a lookup keyed by "SYMBOL|ISIN". Falls back to broker symbols
+  // (resolved:false) if the API is unavailable.
+  async function resolveSymbols(
+    trades: CanonicalTrade[]
+  ): Promise<Map<string, { resolvedSymbol: string; resolved: boolean }>> {
+    const map = new Map<string, { resolvedSymbol: string; resolved: boolean }>();
+    const seen = new Set<string>();
+    const items: { symbol: string; isin: string | null }[] = [];
+    for (const t of trades) {
+      const key = `${t.brokerSymbol}|${t.isin ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({ symbol: t.brokerSymbol, isin: t.isin });
+    }
+    try {
+      const res = await fetch("/api/symbols/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      const data = await res.json();
+      if (data?.ok && Array.isArray(data.results)) {
+        for (const r of data.results) {
+          map.set(`${r.symbol}|${r.isin ?? ""}`, { resolvedSymbol: r.resolvedSymbol, resolved: !!r.resolved });
+        }
+      }
+    } catch {
+      // fall through — unresolved rows are flagged below
+    }
+    return map;
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
     setResult(null);
+    setParsing(true);
+
     const text = await file.text();
-    const { valid, errors } = validateBulkRows(parseCsv(text));
-    setValidRows(valid);
-    setRowErrors(errors);
+    const { brokerName: broker, trades, errors } = normalizeCsv(text);
+    setBrokerName(broker);
+    setParseErrors(errors);
+
+    if (trades.length === 0) {
+      setReviewRows([]);
+      setParsing(false);
+      return;
+    }
+
+    const resolution = await resolveSymbols(trades);
+    const rows: ReviewRow[] = trades.map((t, i) => {
+      const hit = resolution.get(`${t.brokerSymbol}|${t.isin ?? ""}`);
+      return {
+        key: `${i}`,
+        brokerSymbol: t.brokerSymbol,
+        symbol: hit?.resolvedSymbol ?? t.brokerSymbol,
+        side: t.side,
+        quantity: t.quantity,
+        price: Number(t.price.toFixed(2)),
+        tradeDate: t.tradeDate,
+        resolved: hit?.resolved ?? false,
+      };
+    });
+    setReviewRows(rows);
+    setParsing(false);
   }
 
-  async function handleSubmit() {
-    if (validRows.length === 0) return;
+  function updateRow(key: string, patch: Partial<ReviewRow>) {
+    setReviewRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+
+  function deleteRow(key: string) {
+    setReviewRows((prev) => prev.filter((r) => r.key !== key));
+  }
+
+  async function handleAccept() {
+    if (!allValid) return;
     setSubmitting(true);
-    const outcome = await onUpload(validRows);
+    const trades: ImportTrade[] = reviewRows.map((r) => ({
+      symbol: r.symbol.trim().toUpperCase(),
+      side: r.side,
+      quantity: r.quantity,
+      price: r.price,
+      tradeDate: r.tradeDate,
+    }));
+    const outcome = await onImport(trades);
     setSubmitting(false);
     setResult(outcome);
     if (!outcome.error) {
-      setValidRows([]);
-      setRowErrors([]);
+      setReviewRows([]);
       setFileName("");
+      setBrokerName(null);
+      setParseErrors([]);
     }
   }
 
+  function handleReject() {
+    setReviewRows([]);
+    setParseErrors([]);
+    setFileName("");
+    setBrokerName(null);
+    setResult(null);
+    onDone();
+  }
+
+  const inputClass = "w-full rounded border border-line bg-background px-2 py-1 text-sm";
+
   return (
-    <Card title="Bulk upload holdings">
+    <Card title="Bulk upload from broker CSV">
       <div className="space-y-4">
+        <p className="text-sm text-foreground/60">
+          Upload a tradebook from Zerodha, Groww, Upstox, Angel One or ICICI Direct — or the Alloqo template. The broker
+          is auto-detected; review and edit the trades below before they’re applied to this portfolio.
+        </p>
+
         <div className="flex flex-wrap items-center gap-3">
           <label className="inline-flex items-center gap-1.5 rounded-lg border border-line text-sm font-semibold px-3.5 py-2 hover:bg-background cursor-pointer">
             <Upload size={15} /> Choose CSV file
             <input type="file" accept=".csv,text/csv" onChange={handleFileChange} className="hidden" />
           </label>
           {fileName && <span className="text-sm text-foreground/60">{fileName}</span>}
-          <button
-            type="button"
-            onClick={handleDownloadTemplate}
-            className="text-sm font-semibold text-brand hover:underline"
-          >
+          <button type="button" onClick={handleDownloadTemplate} className="text-sm font-semibold text-brand hover:underline">
             Download template
           </button>
         </div>
 
-        {(validRows.length > 0 || rowErrors.length > 0) && (
+        {parsing && <p className="text-sm text-foreground/60">Reading file…</p>}
+
+        {brokerName && !parsing && (
+          <p className="text-sm">
+            Detected format: <span className="font-semibold text-heading">{brokerName}</span>
+            {reviewRows.length > 0 && (
+              <>
+                {" · "}
+                {reviewRows.filter((r) => r.side === "buy").length} buys, {reviewRows.filter((r) => r.side === "sell").length}{" "}
+                sells
+              </>
+            )}
+            {unresolvedCount > 0 && <span className="text-down"> · {unresolvedCount} symbol(s) unresolved — please verify</span>}
+          </p>
+        )}
+
+        {parseErrors.length > 0 && (
+          <div className="rounded-lg border border-line bg-background/50 p-3 text-xs text-foreground/60 space-y-0.5 max-h-32 overflow-y-auto">
+            {parseErrors.map((e, i) => (
+              <div key={i}>
+                Row {e.row}: {e.message}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {reviewRows.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[600px]">
+            <table className="w-full text-sm min-w-[720px]">
               <thead>
                 <tr className="text-left text-xs text-foreground/40 uppercase tracking-wide border-b border-line">
-                  <th className="py-2 font-semibold">Row</th>
+                  <th className="py-2 font-semibold">Side</th>
                   <th className="py-2 font-semibold">Symbol</th>
                   <th className="py-2 font-semibold text-right">Qty</th>
-                  <th className="py-2 font-semibold text-right">Avg. price</th>
-                  <th className="py-2 font-semibold">Buy date</th>
+                  <th className="py-2 font-semibold text-right">Price</th>
+                  <th className="py-2 font-semibold">Date</th>
                   <th className="py-2 font-semibold">Status</th>
+                  <th className="py-2 font-semibold text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {validRows.map((r, i) => (
-                  <tr key={`valid-${i}`}>
-                    <td className="py-2">{i + 2}</td>
-                    <td className="py-2 font-medium">{r.symbol}</td>
-                    <td className="py-2 text-right">{r.quantity}</td>
-                    <td className="py-2 text-right">₹{formatINR(r.avgPrice)}</td>
-                    <td className="py-2">{r.buyDate}</td>
-                    <td className="py-2 text-up">✓ Ready</td>
-                  </tr>
-                ))}
-                {rowErrors.map((e, i) => (
-                  <tr key={`error-${i}`}>
-                    <td className="py-2">{e.row || "—"}</td>
-                    <td className="py-2" colSpan={4}>
-                      —
-                    </td>
-                    <td className="py-2 text-down">✗ {e.message}</td>
-                  </tr>
-                ))}
+                {reviewRows.map((r) => {
+                  const valid = isReviewRowValid(r);
+                  return (
+                    <tr key={r.key}>
+                      <td className="py-1.5 pr-2">
+                        <select
+                          value={r.side}
+                          onChange={(e) => updateRow(r.key, { side: e.target.value as "buy" | "sell" })}
+                          className={inputClass}
+                        >
+                          <option value="buy">Buy</option>
+                          <option value="sell">Sell</option>
+                        </select>
+                      </td>
+                      <td className="py-1.5 pr-2 min-w-[120px]">
+                        <input
+                          type="text"
+                          value={r.symbol}
+                          onChange={(e) => updateRow(r.key, { symbol: e.target.value.toUpperCase(), resolved: true })}
+                          className={inputClass}
+                        />
+                      </td>
+                      <td className="py-1.5 pr-2 w-24">
+                        <input
+                          type="number"
+                          value={Number.isFinite(r.quantity) ? r.quantity : ""}
+                          onChange={(e) => updateRow(r.key, { quantity: Number(e.target.value) })}
+                          className={`${inputClass} text-right`}
+                        />
+                      </td>
+                      <td className="py-1.5 pr-2 w-28">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={Number.isFinite(r.price) ? r.price : ""}
+                          onChange={(e) => updateRow(r.key, { price: Number(e.target.value) })}
+                          className={`${inputClass} text-right`}
+                        />
+                      </td>
+                      <td className="py-1.5 pr-2 w-40">
+                        <input
+                          type="date"
+                          value={r.tradeDate}
+                          onChange={(e) => updateRow(r.key, { tradeDate: e.target.value })}
+                          className={inputClass}
+                        />
+                      </td>
+                      <td className="py-1.5 pr-2 whitespace-nowrap">
+                        {!valid ? (
+                          <span className="text-down">✗ Invalid</span>
+                        ) : !r.resolved ? (
+                          <span className="text-down">⚠ Unresolved</span>
+                        ) : (
+                          <span className="text-up">✓ Ready</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => deleteRow(r.key)}
+                          className="text-foreground/40 hover:text-down p-1"
+                          aria-label="Delete row"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1077,25 +1266,31 @@ function BulkUploadForm({
 
         {result && (
           <p className={`text-sm ${result.error ? "text-down" : "text-up"}`}>
-            {result.error ? result.error : `Uploaded ${result.inserted} holding${result.inserted === 1 ? "" : "s"}.`}
+            {result.error
+              ? result.error
+              : `Imported ${result.inserted} buy lot${result.inserted === 1 ? "" : "s"} and ${result.sold} sell${
+                  result.sold === 1 ? "" : "s"
+                }${result.skipped > 0 ? `; ${result.skipped} trade(s) skipped (oversell)` : ""}.`}
           </p>
         )}
 
         <div className="flex gap-2">
+          {reviewRows.length > 0 && (
+            <button
+              type="button"
+              onClick={handleAccept}
+              disabled={submitting || !allValid}
+              className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 disabled:opacity-60"
+            >
+              {submitting ? "Importing…" : `Accept & import ${reviewRows.length} trade${reviewRows.length === 1 ? "" : "s"}`}
+            </button>
+          )}
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={submitting || validRows.length === 0}
-            className="rounded-lg bg-brand text-white text-sm font-semibold px-4 py-2 hover:bg-brand/90 disabled:opacity-60"
-          >
-            {submitting ? "Uploading…" : `Upload ${validRows.length} holding${validRows.length === 1 ? "" : "s"}`}
-          </button>
-          <button
-            type="button"
-            onClick={onDone}
+            onClick={handleReject}
             className="rounded-lg border border-line text-sm font-semibold px-4 py-2 hover:bg-background"
           >
-            Close
+            {reviewRows.length > 0 ? "Reject" : "Close"}
           </button>
         </div>
       </div>

@@ -76,6 +76,33 @@ export async function lookupByInstrumentKey(instrumentKey: string): Promise<Sear
   return found ? { symbol: found.symbol, name: found.name, exchange: found.exchange } : null;
 }
 
+// Equity instrument keys are "<EXCHANGE>_EQ|<ISIN>", so the ISIN is the second
+// segment. Resolves an ISIN (as it appears in broker tradebook exports) back to
+// the app's canonical trading symbol. NSE is preferred when dual-listed.
+export async function lookupByIsin(isin: string): Promise<SearchableInstrument | null> {
+  const target = isin.trim().toUpperCase();
+  if (!target) return null;
+  const [nse, bse] = await Promise.all([loadExchange("NSE"), loadExchange("BSE")]);
+  const match = (i: CachedInstrument) => i.instrumentKey.split("|")[1] === target;
+  const found = nse.find(match) ?? bse.find(match);
+  return found ? { symbol: found.symbol, name: found.name, exchange: found.exchange } : null;
+}
+
+// Batch ISIN → symbol resolution over a single pass of the instrument master.
+export async function resolveByIsins(isins: string[]): Promise<Map<string, SearchableInstrument>> {
+  const wanted = new Set(isins.map((i) => i.trim().toUpperCase()).filter(Boolean));
+  const out = new Map<string, SearchableInstrument>();
+  if (wanted.size === 0) return out;
+  const [nse, bse] = await Promise.all([loadExchange("NSE"), loadExchange("BSE")]);
+  for (const inst of [...nse, ...bse]) {
+    const isin = inst.instrumentKey.split("|")[1];
+    if (isin && wanted.has(isin) && !out.has(isin)) {
+      out.set(isin, { symbol: inst.symbol, name: inst.name, exchange: inst.exchange });
+    }
+  }
+  return out;
+}
+
 // Used by quote providers to resolve trading symbols to Upstox instrument
 // keys without re-fetching the instrument master they already share here.
 // Callers sometimes already have a fully-qualified instrument key (e.g.
