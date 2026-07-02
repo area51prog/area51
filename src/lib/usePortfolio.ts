@@ -33,6 +33,15 @@ export interface Position {
   avgPrice: number;
 }
 
+// A normalized trade to replay into the portfolio (from a broker CSV import).
+export interface ImportTrade {
+  symbol: string;
+  side: "buy" | "sell";
+  quantity: number;
+  price: number;
+  tradeDate: string; // YYYY-MM-DD
+}
+
 export const SUMMARY_ID = "ALL";
 
 const LOT_COLUMNS = "id, portfolio_id, symbol, quantity, avg_price, buy_date, created_at";
@@ -55,6 +64,36 @@ function toLot(row: {
     buyDate: row.buy_date,
     createdAt: row.created_at,
   };
+}
+
+// FIFO consumption of a symbol's lots by a sell of `quantity` at `price`.
+// Pure: returns which lots to delete/update, the realized P&L, and any
+// unfilled shortfall. Shared by single-sell and the CSV trade-replay import.
+function consumeFifo(
+  lots: Lot[],
+  quantity: number,
+  price: number
+): { deletes: string[]; updates: { id: string; quantity: number }[]; realizedPnl: number; shortfall: number } {
+  const sorted = [...lots].sort((a, b) =>
+    a.buyDate === b.buyDate ? a.createdAt.localeCompare(b.createdAt) : a.buyDate.localeCompare(b.buyDate)
+  );
+  let remaining = quantity;
+  let realizedPnl = 0;
+  const updates: { id: string; quantity: number }[] = [];
+  const deletes: string[] = [];
+  for (const lot of sorted) {
+    if (remaining <= 0) break;
+    if (lot.quantity <= remaining) {
+      deletes.push(lot.id);
+      remaining -= lot.quantity;
+      realizedPnl += (price - lot.avgPrice) * lot.quantity;
+    } else {
+      updates.push({ id: lot.id, quantity: lot.quantity - remaining });
+      realizedPnl += (price - lot.avgPrice) * remaining;
+      remaining = 0;
+    }
+  }
+  return { deletes, updates, realizedPnl, shortfall: remaining };
 }
 
 function aggregatePositions(lots: Lot[]): Position[] {
@@ -306,34 +345,131 @@ export function usePortfolio() {
     return { inserted: data.length };
   }
 
+  // Replays a set of normalized buy/sell trades (from a broker CSV import) into
+  // the active portfolio, chronologically. Buys create lots; sells consume lots
+  // FIFO with realized P&L — including lots created earlier in the same import.
+  // Everything is computed in memory first, then persisted in batched writes.
+  async function importTrades(
+    trades: ImportTrade[]
+  ): Promise<{ inserted: number; sold: number; skipped: number; error?: string }> {
+    if (!user || !activePortfolioId || activePortfolioId === SUMMARY_ID)
+      return { inserted: 0, sold: 0, skipped: 0, error: "Select a single portfolio first" };
+    if (trades.length === 0) return { inserted: 0, sold: 0, skipped: 0 };
+
+    // Chronological; buys before sells on the same date so a same-day sell can
+    // draw on that day's buys.
+    const sorted = [...trades].sort((a, b) =>
+      a.tradeDate === b.tradeDate ? (a.side === b.side ? 0 : a.side === "buy" ? -1 : 1) : a.tradeDate.localeCompare(b.tradeDate)
+    );
+
+    // Working set: existing lots for this portfolio plus lots created during the
+    // replay (tagged isNew with a synthetic id/createdAt). consumeFifo works on
+    // this uniformly; we diff against the originals afterwards to decide DB ops.
+    type WorkingLot = Lot & { isNew: boolean };
+    let working: WorkingLot[] = lots
+      .filter((l) => l.portfolioId === activePortfolioId)
+      .map((l) => ({ ...l, isNew: false }));
+    const originals = new Map(working.map((l) => [l.id, l.quantity] as const));
+
+    const txns: {
+      symbol: string;
+      side: "buy" | "sell";
+      quantity: number;
+      price: number;
+      txnDate: string;
+      realizedPnl: number | null;
+    }[] = [];
+    let inserted = 0;
+    let sold = 0;
+    let skipped = 0;
+    let counter = 0;
+
+    for (const t of sorted) {
+      if (t.side === "buy") {
+        working.push({
+          id: `new:${counter}`,
+          portfolioId: activePortfolioId,
+          symbol: t.symbol,
+          quantity: t.quantity,
+          avgPrice: t.price,
+          buyDate: t.tradeDate,
+          // Synthetic, monotonic — orders in-import lots by insertion for FIFO ties.
+          createdAt: new Date(Date.now() + counter).toISOString(),
+          isNew: true,
+        });
+        counter++;
+        txns.push({ symbol: t.symbol, side: "buy", quantity: t.quantity, price: t.price, txnDate: t.tradeDate, realizedPnl: null });
+      } else {
+        const symLots = working.filter((l) => l.symbol === t.symbol);
+        const held = symLots.reduce((s, l) => s + l.quantity, 0);
+        if (t.quantity > held) {
+          // Can't sell more than held at this point in the timeline — skip it.
+          skipped++;
+          continue;
+        }
+        const { deletes, updates, realizedPnl } = consumeFifo(symLots, t.quantity, t.price);
+        working = working
+          .filter((l) => !deletes.includes(l.id))
+          .map((l) => {
+            const u = updates.find((u) => u.id === l.id);
+            return u ? { ...l, quantity: u.quantity } : l;
+          });
+        txns.push({ symbol: t.symbol, side: "sell", quantity: t.quantity, price: t.price, txnDate: t.tradeDate, realizedPnl });
+        sold++;
+      }
+    }
+
+    // Diff the final working set against the originals to derive DB operations.
+    const finalById = new Map(working.map((l) => [l.id, l] as const));
+    const existingDeletes = [...originals.keys()].filter((id) => !finalById.has(id));
+    const existingUpdates = [...finalById.values()].filter(
+      (l) => !l.isNew && originals.get(l.id) !== l.quantity
+    );
+    const newInserts = working.filter((l) => l.isNew && l.quantity > 0);
+
+    try {
+      if (existingDeletes.length > 0) {
+        const { error } = await supabase.from("portfolio_holdings").delete().in("id", existingDeletes);
+        if (error) throw error;
+      }
+      for (const u of existingUpdates) {
+        const { error } = await supabase.from("portfolio_holdings").update({ quantity: u.quantity }).eq("id", u.id);
+        if (error) throw error;
+      }
+      if (newInserts.length > 0) {
+        const { error } = await supabase.from("portfolio_holdings").insert(
+          newInserts.map((l) => ({
+            user_id: user.id,
+            portfolio_id: activePortfolioId,
+            symbol: l.symbol,
+            quantity: l.quantity,
+            avg_price: l.avgPrice,
+            buy_date: l.buyDate,
+          }))
+        );
+        if (error) throw error;
+        inserted = newInserts.length;
+      }
+      await logTransactions(txns);
+    } catch (e) {
+      return { inserted: 0, sold: 0, skipped, error: e instanceof Error ? e.message : "Failed to import trades" };
+    }
+
+    // Reload from the DB so local state exactly reflects the persisted lots.
+    await loadLots([activePortfolioId]);
+    return { inserted, sold, skipped };
+  }
+
   async function sellHolding(symbol: string, quantity: number, price: number, sellDate: string): Promise<{ error?: string }> {
     if (!activePortfolioId || activePortfolioId === SUMMARY_ID) return { error: "Select a single portfolio first" };
     if (quantity <= 0) return { error: "Enter a quantity greater than zero." };
 
-    const symbolLots = lots
-      .filter((l) => l.portfolioId === activePortfolioId && l.symbol === symbol)
-      .sort((a, b) => (a.buyDate === b.buyDate ? a.createdAt.localeCompare(b.createdAt) : a.buyDate.localeCompare(b.buyDate)));
+    const symbolLots = lots.filter((l) => l.portfolioId === activePortfolioId && l.symbol === symbol);
 
     const heldQuantity = symbolLots.reduce((sum, l) => sum + l.quantity, 0);
     if (quantity > heldQuantity) return { error: "Cannot sell more than you hold." };
 
-    let remaining = quantity;
-    let realizedPnl = 0;
-    const updates: { id: string; quantity: number }[] = [];
-    const deletes: string[] = [];
-
-    for (const lot of symbolLots) {
-      if (remaining <= 0) break;
-      if (lot.quantity <= remaining) {
-        deletes.push(lot.id);
-        remaining -= lot.quantity;
-        realizedPnl += (price - lot.avgPrice) * lot.quantity;
-      } else {
-        updates.push({ id: lot.id, quantity: lot.quantity - remaining });
-        realizedPnl += (price - lot.avgPrice) * remaining;
-        remaining = 0;
-      }
-    }
+    const { deletes, updates, realizedPnl } = consumeFifo(symbolLots, quantity, price);
 
     const previous = lots;
     setLots((prev) =>
@@ -395,6 +531,7 @@ export function usePortfolio() {
     ready,
     buyHolding,
     bulkAddHoldings,
+    importTrades,
     sellHolding,
     deletePosition,
   };
